@@ -1,8 +1,7 @@
 import 'package:flutter/material.dart';
-import 'package:supabase_flutter/supabase_flutter.dart';
 import '../main.dart';
-import 'home_page.dart';
 import 'login_page.dart';
+import 'main_navigation_page.dart';
 
 class AuthPage extends StatelessWidget {
   const AuthPage({super.key});
@@ -12,7 +11,7 @@ class AuthPage extends StatelessWidget {
     final session = supabase.auth.currentSession;
 
     if (session != null) {
-      return const HomePage();
+      return const MainNavigationPage();
     } else {
       return const LoginPage();
     }

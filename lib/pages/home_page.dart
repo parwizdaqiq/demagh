@@ -59,10 +59,6 @@ class _HomePageState extends State<HomePage> {
     return '$hour:$minute';
   }
 
-  String _getFirstName(String? email) {
-    if (email == null || email.isEmpty) return 'User';
-    return email.split('@').first;
-  }
 
   void _showAddTaskSheet() {
     _taskController.clear();
@@ -214,7 +210,7 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildHeader(String? email) {
+  Widget _buildHeader() {
     return Container(
       width: double.infinity,
       padding: const EdgeInsets.fromLTRB(20, 20, 20, 18),
@@ -232,17 +228,9 @@ class _HomePageState extends State<HomePage> {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
-          const Text(
-            'Demagh',
-            style: TextStyle(
-              color: Colors.white,
-              fontSize: 28,
-              fontWeight: FontWeight.w800,
-            ),
-          ),
           const SizedBox(height: 8),
           Text(
-            'Welcome back, ${_getFirstName(email)}',
+            'Qasm Wakhla che pa Yad de wa',
             style: TextStyle(
               color: Colors.white.withValues(alpha: 0.9),
               fontSize: 16,
@@ -342,7 +330,6 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
-    final user = supabase.auth.currentUser;
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -369,7 +356,7 @@ class _HomePageState extends State<HomePage> {
         padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
         child: Column(
           children: [
-            _buildHeader(user?.email),
+            _buildHeader(),
             const SizedBox(height: 20),
             Row(
               children: [
