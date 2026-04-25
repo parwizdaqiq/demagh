@@ -11,18 +11,43 @@ class LoginPage extends StatefulWidget {
 }
 
 class _LoginPageState extends State<LoginPage> {
+  // Controllers
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  // Loading state
   bool _isLoading = false;
+
+  // NEW: controls password show/hide
+  bool _obscurePassword = true;
+
+  // NEW: simple email validator
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(email);
+  }
 
   Future<void> _login() async {
     final email = _emailController.text.trim();
     final password = _passwordController.text.trim();
 
+    // Validation
     if (email.isEmpty || password.isEmpty) {
       ScaffoldMessenger.of(context).showSnackBar(
         const SnackBar(content: Text('Please fill all fields')),
+      );
+      return;
+    }
+
+    if (!_isValidEmail(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid email address')),
+      );
+      return;
+    }
+
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 6 characters')),
       );
       return;
     }
@@ -37,7 +62,6 @@ class _LoginPageState extends State<LoginPage> {
 
       if (!mounted) return;
 
-      // ✅ FIX: Go to main navigation (tabs), NOT HomePage
       Navigator.pushAndRemoveUntil(
         context,
         MaterialPageRoute(builder: (_) => const MainNavigationPage()),
@@ -63,6 +87,7 @@ class _LoginPageState extends State<LoginPage> {
     super.dispose();
   }
 
+  // Input design
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
       hintText: hint,
@@ -107,20 +132,39 @@ class _LoginPageState extends State<LoginPage> {
             ),
             const SizedBox(height: 24),
 
+            // UPDATED: email input with placeholder + icon
             TextField(
               controller: _emailController,
-              decoration: _inputDecoration('Email'),
+              decoration: _inputDecoration('Email address').copyWith(
+                prefixIcon: const Icon(Icons.email_outlined),
+              ),
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 16),
 
+            // UPDATED: password input with eye show/hide icon
             TextField(
               controller: _passwordController,
-              decoration: _inputDecoration('Password'),
-              obscureText: true,
+              obscureText: _obscurePassword,
+              decoration: _inputDecoration('Password').copyWith(
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
+              ),
             ),
             const SizedBox(height: 24),
 
+            // Login button
             SizedBox(
               width: double.infinity,
               height: 52,
@@ -154,6 +198,7 @@ class _LoginPageState extends State<LoginPage> {
 
             const SizedBox(height: 16),
 
+            // Register navigation
             TextButton(
               onPressed: () {
                 Navigator.push(

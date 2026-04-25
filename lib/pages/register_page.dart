@@ -9,78 +9,126 @@ class RegisterPage extends StatefulWidget {
 }
 
 class _RegisterPageState extends State<RegisterPage> {
+  // Controllers
   final TextEditingController _firstNameController = TextEditingController();
   final TextEditingController _lastNameController = TextEditingController();
   final TextEditingController _emailController = TextEditingController();
   final TextEditingController _passwordController = TextEditingController();
 
+  // NEW: confirm password controller
+  final TextEditingController _confirmPasswordController =
+      TextEditingController();
+
   bool _isLoading = false;
 
-Future<void> _register() async {
-  final firstName = _firstNameController.text.trim();
-  final lastName = _lastNameController.text.trim();
-  final email = _emailController.text.trim();
-  final password = _passwordController.text.trim();
+  // NEW: show/hide password states
+  bool _obscurePassword = true;
+  bool _obscureConfirmPassword = true;
 
-  if (firstName.isEmpty ||
-      lastName.isEmpty ||
-      email.isEmpty ||
-      password.isEmpty) {
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Please fill all fields')),
-    );
-    return;
+  // NEW: email validator
+  bool _isValidEmail(String email) {
+    return RegExp(r'^[\w\.-]+@[\w\.-]+\.\w+$').hasMatch(email);
   }
 
-  setState(() => _isLoading = true);
+  Future<void> _register() async {
+    final firstName = _firstNameController.text.trim();
+    final lastName = _lastNameController.text.trim();
+    final email = _emailController.text.trim();
+    final password = _passwordController.text.trim();
+    final confirmPassword = _confirmPasswordController.text.trim();
 
-  try {
-    // 1️⃣ Create account
-    await supabase.auth.signUp(
-      email: email,
-      password: password,
-    );
-
-    // 2️⃣ FORCE LOGIN (important)
-    await supabase.auth.signInWithPassword(
-      email: email,
-      password: password,
-    );
-
-    final user = supabase.auth.currentUser;
-
-    if (user == null) {
-      throw Exception('User not authenticated');
+    // Validation
+    if (firstName.isEmpty ||
+        lastName.isEmpty ||
+        email.isEmpty ||
+        password.isEmpty ||
+        confirmPassword.isEmpty) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please fill all fields')),
+      );
+      return;
     }
 
-    // 3️⃣ Insert profile (now auth.uid() works)
-    await supabase.from('profiles').upsert({
-      'id': user.id,
-      'first_name': firstName,
-      'last_name': lastName,
-      'email': email,
-      'created_at': DateTime.now().toIso8601String(),
-    });
+    if (!_isValidEmail(email)) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please enter a valid email address')),
+      );
+      return;
+    }
 
-    if (!mounted) return;
+    if (password.length < 6) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Password must be at least 6 characters')),
+      );
+      return;
+    }
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      const SnackBar(content: Text('Registration successful 🎉')),
-    );
+    if (password != confirmPassword) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Passwords do not match')),
+      );
+      return;
+    }
 
-    Navigator.pop(context);
-  } catch (e) {
-    if (!mounted) return;
+    setState(() => _isLoading = true);
 
-    ScaffoldMessenger.of(context).showSnackBar(
-      SnackBar(content: Text('Registration failed: $e')),
-    );
-  } finally {
-    if (mounted) {
-      setState(() => _isLoading = false);
+    try {
+      // Create account
+      await supabase.auth.signUp(
+        email: email,
+        password: password,
+      );
+
+      // Force login after registration
+      await supabase.auth.signInWithPassword(
+        email: email,
+        password: password,
+      );
+
+      final user = supabase.auth.currentUser;
+
+      if (user == null) {
+        throw Exception('User not authenticated');
+      }
+
+      // Insert user profile
+      await supabase.from('profiles').upsert({
+        'id': user.id,
+        'first_name': firstName,
+        'last_name': lastName,
+        'email': email,
+        'created_at': DateTime.now().toIso8601String(),
+      });
+
+      if (!mounted) return;
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Registration successful 🎉')),
+      );
+
+      Navigator.pop(context);
+    } catch (e) {
+      if (!mounted) return;
+
+      final errorText = e.toString();
+
+      if (errorText.contains('user_already_exists')) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          const SnackBar(
+            content: Text('This email is already registered. Please log in.'),
+          ),
+        );
+      } else {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Registration failed: $e')),
+        );
+      }
+    } finally {
+      if (mounted) {
+        setState(() => _isLoading = false);
+      }
     }
   }
-}
 
   InputDecoration _inputDecoration(String hint) {
     return InputDecoration(
@@ -104,6 +152,10 @@ Future<void> _register() async {
     _lastNameController.dispose();
     _emailController.dispose();
     _passwordController.dispose();
+
+    // NEW: dispose confirm password controller
+    _confirmPasswordController.dispose();
+
     super.dispose();
   }
 
@@ -148,28 +200,77 @@ Future<void> _register() async {
               ),
             ),
             const SizedBox(height: 28),
+
             TextField(
               controller: _firstNameController,
-              decoration: _inputDecoration('First name'),
+              decoration: _inputDecoration('First name').copyWith(
+                prefixIcon: const Icon(Icons.person_outline_rounded),
+              ),
             ),
             const SizedBox(height: 14),
+
             TextField(
               controller: _lastNameController,
-              decoration: _inputDecoration('Last name'),
+              decoration: _inputDecoration('Last name').copyWith(
+                prefixIcon: const Icon(Icons.badge_outlined),
+              ),
             ),
             const SizedBox(height: 14),
+
             TextField(
               controller: _emailController,
-              decoration: _inputDecoration('Email'),
+              decoration: _inputDecoration('Email address').copyWith(
+                prefixIcon: const Icon(Icons.email_outlined),
+              ),
               keyboardType: TextInputType.emailAddress,
             ),
             const SizedBox(height: 14),
+
+            // UPDATED: password with eye icon
             TextField(
               controller: _passwordController,
-              decoration: _inputDecoration('Password'),
-              obscureText: true,
+              obscureText: _obscurePassword,
+              decoration: _inputDecoration('Password').copyWith(
+                prefixIcon: const Icon(Icons.lock_outline_rounded),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscurePassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscurePassword = !_obscurePassword;
+                    });
+                  },
+                ),
+              ),
             ),
+            const SizedBox(height: 14),
+
+            // NEW: confirm password field
+            TextField(
+              controller: _confirmPasswordController,
+              obscureText: _obscureConfirmPassword,
+              decoration: _inputDecoration('Confirm password').copyWith(
+                prefixIcon: const Icon(Icons.lock_reset_rounded),
+                suffixIcon: IconButton(
+                  icon: Icon(
+                    _obscureConfirmPassword
+                        ? Icons.visibility_off_outlined
+                        : Icons.visibility_outlined,
+                  ),
+                  onPressed: () {
+                    setState(() {
+                      _obscureConfirmPassword = !_obscureConfirmPassword;
+                    });
+                  },
+                ),
+              ),
+            ),
+
             const SizedBox(height: 24),
+
             SizedBox(
               width: double.infinity,
               height: 54,
