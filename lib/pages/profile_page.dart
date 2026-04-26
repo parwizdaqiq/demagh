@@ -10,20 +10,33 @@ class ProfilePage extends StatefulWidget {
 }
 
 class _ProfilePageState extends State<ProfilePage> {
+  late Future<Map<String, dynamic>?> _profileFuture;
+
+  @override
+  void initState() {
+    super.initState();
+    _profileFuture = fetchProfile();
+  }
+
+  // Fetch user profile
   Future<Map<String, dynamic>?> fetchProfile() async {
     final user = supabase.auth.currentUser;
-
     if (user == null) return null;
 
-    final response = await supabase
+    return await supabase
         .from('profiles')
         .select()
         .eq('id', user.id)
         .maybeSingle();
-
-    return response;
   }
 
+  void _refreshProfile() {
+    setState(() {
+      _profileFuture = fetchProfile();
+    });
+  }
+
+  // Logout
   Future<void> _logout(BuildContext context) async {
     await supabase.auth.signOut();
 
@@ -36,48 +49,148 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _infoTile({
-    required IconData icon,
-    required String title,
-    required String value,
-  }) {
+  // Edit name
+  Future<void> _editName({
+    required String first,
+    required String last,
+  }) async {
+    final firstController = TextEditingController(text: first);
+    final lastController = TextEditingController(text: last);
+
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Change Name'),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            TextField(
+              controller: firstController,
+              decoration: const InputDecoration(labelText: 'First name'),
+            ),
+            const SizedBox(height: 10),
+            TextField(
+              controller: lastController,
+              decoration: const InputDecoration(labelText: 'Last name'),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          ElevatedButton(
+              onPressed: () => Navigator.pop(context, true),
+              child: const Text('Save')),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    await supabase.from('profiles').update({
+      'first_name': firstController.text.trim(),
+      'last_name': lastController.text.trim(),
+    }).eq('id', user.id);
+
+    _refreshProfile();
+  }
+
+  // Delete account
+  Future<void> _deleteAccount(BuildContext context) async {
+    final confirm = await showDialog<bool>(
+      context: context,
+      builder: (_) => AlertDialog(
+        title: const Text('Delete Account'),
+        content: const Text(
+            'Are you sure you want to delete your account? This cannot be undone.'),
+        actions: [
+          TextButton(
+              onPressed: () => Navigator.pop(context, false),
+              child: const Text('Cancel')),
+          TextButton(
+            onPressed: () => Navigator.pop(context, true),
+            child: const Text('Delete',
+                style: TextStyle(color: Colors.red)),
+          ),
+        ],
+      ),
+    );
+
+    if (confirm != true) return;
+
+    await supabase.rpc('delete_my_account');
+
+    if (!context.mounted) return;
+
+    Navigator.pushAndRemoveUntil(
+      context,
+      MaterialPageRoute(builder: (_) => const LoginPage()),
+      (route) => false,
+    );
+  }
+
+  Widget _tile(String title, String value, IconData icon) {
     return Container(
       margin: const EdgeInsets.only(bottom: 12),
       padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(18),
-        border: Border.all(color: Colors.grey.shade200),
+        borderRadius: BorderRadius.circular(16),
       ),
       child: Row(
         children: [
-          Icon(icon, color: const Color(0xFF111827)),
+          Icon(icon),
           const SizedBox(width: 12),
           Expanded(
             child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                Text(
-                  title,
-                  style: TextStyle(
-                    fontSize: 13,
-                    color: Colors.grey.shade600,
-                  ),
-                ),
-                const SizedBox(height: 4),
-                Text(
-                  value,
-                  style: const TextStyle(
-                    fontSize: 16,
-                    fontWeight: FontWeight.w700,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-              ],
-            ),
-          ),
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(title,
+                      style: const TextStyle(
+                          fontSize: 12, color: Colors.grey)),
+                  Text(value,
+                      style: const TextStyle(
+                          fontSize: 16,
+                          fontWeight: FontWeight.bold)),
+                ]),
+          )
         ],
       ),
+    );
+  }
+
+  Widget _button({
+    required String text,
+    required VoidCallback onPressed,
+    required Color color,
+    IconData? icon,
+    bool outline = false,
+  }) {
+    return SizedBox(
+      width: double.infinity,
+      height: 50,
+      child: outline
+          ? OutlinedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon),
+              label: Text(text),
+              style: OutlinedButton.styleFrom(
+                foregroundColor: color,
+              ),
+            )
+          : ElevatedButton.icon(
+              onPressed: onPressed,
+              icon: Icon(icon),
+              label: Text(text),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: color,
+                foregroundColor: Colors.white,
+              ),
+            ),
     );
   }
 
@@ -86,130 +199,59 @@ class _ProfilePageState extends State<ProfilePage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
+        title: const Text('Profile'),
+        centerTitle: true,
         backgroundColor: const Color(0xFFF8FAFC),
         elevation: 0,
-        scrolledUnderElevation: 0,
-        centerTitle: true,
-        title: const Text(
-          'Profile',
-          style: TextStyle(
-            color: Color(0xFF111827),
-            fontWeight: FontWeight.w700,
-          ),
-        ),
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
-        future: fetchProfile(),
+        future: _profileFuture,
         builder: (context, snapshot) {
-          if (snapshot.connectionState == ConnectionState.waiting) {
+          if (!snapshot.hasData) {
             return const Center(child: CircularProgressIndicator());
           }
 
-          if (snapshot.hasError) {
-            return Center(
-              child: Text('Error: ${snapshot.error}'),
-            );
-          }
+          final data = snapshot.data!;
+          final first = data['first_name'] ?? '';
+          final last = data['last_name'] ?? '';
+          final email = data['email'] ?? '';
 
-          final profile = snapshot.data;
-
-          if (profile == null) {
-            return const Center(
-              child: Text('Profile not found'),
-            );
-          }
-
-          final firstName = profile['first_name'] ?? '';
-          final lastName = profile['last_name'] ?? '';
-          final email = profile['email'] ?? '';
-          final initials =
-              '${firstName.isNotEmpty ? firstName[0] : ''}${lastName.isNotEmpty ? lastName[0] : ''}';
-
-          return Padding(
+          return SingleChildScrollView(
             padding: const EdgeInsets.all(16),
             child: Column(
               children: [
-                Container(
-                  width: double.infinity,
-                  padding: const EdgeInsets.all(24),
-                  decoration: BoxDecoration(
-                    gradient: const LinearGradient(
-                      colors: [
-                        Color(0xFF0F172A),
-                        Color(0xFF1E293B),
-                      ],
-                      begin: Alignment.topLeft,
-                      end: Alignment.bottomRight,
-                    ),
-                    borderRadius: BorderRadius.circular(28),
-                  ),
-                  child: Column(
-                    children: [
-                      CircleAvatar(
-                        radius: 36,
-                        backgroundColor: Colors.white.withValues(alpha: 0.14),
-                        child: Text(
-                          initials,
-                          style: const TextStyle(
-                            fontSize: 24,
-                            fontWeight: FontWeight.w800,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ),
-                      const SizedBox(height: 14),
-                      Text(
-                        '$firstName $lastName',
-                        style: const TextStyle(
-                          fontSize: 22,
-                          fontWeight: FontWeight.w800,
-                          color: Colors.white,
-                        ),
-                      ),
-                      const SizedBox(height: 6),
-                      Text(
-                        email,
-                        style: TextStyle(
-                          color: Colors.white.withValues(alpha: 0.85),
-                        ),
-                      ),
-                    ],
-                  ),
+                _tile('First Name', first, Icons.person),
+                _tile('Last Name', last, Icons.badge),
+                _tile('Email', email, Icons.email),
+
+                const SizedBox(height: 16),
+
+                _button(
+                  text: 'Change Name',
+                  icon: Icons.edit,
+                  color: Colors.black,
+                  onPressed: () =>
+                      _editName(first: first, last: last),
                 ),
-                const SizedBox(height: 20),
-                _infoTile(
-                  icon: Icons.person_outline_rounded,
-                  title: 'First name',
-                  value: firstName,
+
+                const SizedBox(height: 10),
+
+                _button(
+                  text: 'Delete Account',
+                  icon: Icons.delete,
+                  color: Colors.red,
+                  outline: true,
+                  onPressed: () => _deleteAccount(context),
                 ),
-                _infoTile(
-                  icon: Icons.badge_outlined,
-                  title: 'Last name',
-                  value: lastName,
+
+                const SizedBox(height: 10),
+
+                _button(
+                  text: 'Logout',
+                  icon: Icons.logout,
+                  color: Colors.red,
+                  onPressed: () => _logout(context),
                 ),
-                _infoTile(
-                  icon: Icons.email_outlined,
-                  title: 'Email',
-                  value: email,
-                ),
-                const Spacer(),
-                SizedBox(
-                  width: double.infinity,
-                  height: 54,
-                  child: ElevatedButton.icon(
-                    onPressed: () => _logout(context),
-                    icon: const Icon(Icons.logout_rounded),
-                    label: const Text('Logout'),
-                    style: ElevatedButton.styleFrom(
-                      backgroundColor: Colors.red.shade600,
-                      foregroundColor: Colors.white,
-                      shape: RoundedRectangleBorder(
-                        borderRadius: BorderRadius.circular(18),
-                      ),
-                    ),
-                  ),
-                ),
-                const SizedBox(height: 8),
               ],
             ),
           );
