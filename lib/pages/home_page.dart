@@ -14,11 +14,21 @@ class _HomePageState extends State<HomePage> {
 
   TimeOfDay? _selectedTime;
 
+  // Task settings
   String _priority = 'normal'; // normal | priority
   String _repeatType = 'none'; // none | daily | specific
   DateTime? _specificDate;
 
-  String _taskFilter = 'all'; // all | priority
+  // Category filter
+  String _selectedCategory = 'All';
+
+  final List<String> _categories = [
+    'All',
+    'Personal',
+    'Assignments',
+    'Meet',
+    'Job',
+  ];
 
   Future<void> _logout(BuildContext context) async {
     await supabase.auth.signOut();
@@ -808,32 +818,43 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
-  Widget _buildFilterChips() {
-    return Row(
-      children: [
-        ChoiceChip(
-          label: const Text('All'),
-          selected: _taskFilter == 'all',
-          onSelected: (_) {
-            setState(() {
-              _taskFilter = 'all';
-            });
-          },
+Widget _buildFilterChips() {
+  return Row(
+    children: [
+      ChoiceChip(
+        label: const Text('All'),
+        selected: _selectedCategory == 'All',
+        selectedColor: const Color(0xFF111827),
+        labelStyle: TextStyle(
+          color: _selectedCategory == 'All' ? Colors.white : Colors.black,
+          fontWeight: FontWeight.w600,
         ),
-        const SizedBox(width: 10),
-        ChoiceChip(
-          label: const Text('Priority'),
-          selected: _taskFilter == 'priority',
-          selectedColor: const Color(0xFFFFE4E6),
-          onSelected: (_) {
-            setState(() {
-              _taskFilter = 'priority';
-            });
-          },
+        onSelected: (_) {
+          setState(() {
+            _selectedCategory = 'All';
+          });
+        },
+      ),
+      const SizedBox(width: 10),
+      ChoiceChip(
+        label: const Text('Priority'),
+        selected: _selectedCategory == 'Priority',
+        selectedColor: const Color(0xFFFFE4E6),
+        labelStyle: TextStyle(
+          color: _selectedCategory == 'Priority'
+              ? const Color(0xFFE11D48)
+              : Colors.black,
+          fontWeight: FontWeight.w600,
         ),
-      ],
-    );
-  }
+        onSelected: (_) {
+          setState(() {
+            _selectedCategory = 'Priority';
+          });
+        },
+      ),
+    ],
+  );
+}
 
   @override
   void dispose() {
@@ -902,89 +923,87 @@ class _HomePageState extends State<HomePage> {
                 ),
               ],
             ),
-            const SizedBox(height: 12),
-            _buildFilterChips(),
-            const SizedBox(height: 14),
-            Expanded(
-              child: FutureBuilder<List<Map<String, dynamic>>>(
-                future: fetchTasks(),
-                builder: (context, snapshot) {
-                  if (snapshot.connectionState == ConnectionState.waiting) {
-                    return const Center(child: CircularProgressIndicator());
-                  }
+              const SizedBox(height: 12),
+              _buildFilterChips(),
+              const SizedBox(height: 14),
+              Expanded(
+                child: FutureBuilder<List<Map<String, dynamic>>>(
+                  future: fetchTasks(),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
 
-                  if (snapshot.hasError) {
-                    return Center(
-                      child: Text(
-                        'Something went wrong.\n${snapshot.error}',
-                        textAlign: TextAlign.center,
-                      ),
-                    );
-                  }
-
+                    if (snapshot.hasError) {
+                      return Center(
+                        child: Text(
+                          'Something went wrong.\n${snapshot.error}',
+                          textAlign: TextAlign.center,
+                        ),
+                      );
+                    }
                   final allTasks = snapshot.data ?? [];
 
-                  final tasks = _taskFilter == 'priority'
-                      ? allTasks
-                          .where((task) =>
-                              task['priority'] == 'priority' ||
-                              task['priority'] == 'high')
-                          .toList()
-                      : allTasks;
+              final tasks = _selectedCategory == 'Priority'
+                  ? allTasks
+                      .where((task) =>
+                          task['priority'] == 'priority' || task['priority'] == 'high')
+                      .toList()
+                  : allTasks;
 
-                  if (tasks.isEmpty) {
-                    return Center(
-                      child: Container(
-                        width: double.infinity,
-                        padding: const EdgeInsets.all(28),
-                        decoration: BoxDecoration(
-                          color: Colors.white,
-                          borderRadius: BorderRadius.circular(24),
-                          border: Border.all(color: Colors.grey.shade200),
-                        ),
-                        child: Column(
-                          mainAxisSize: MainAxisSize.min,
-                          children: [
-                            Container(
-                              width: 70,
-                              height: 70,
-                              decoration: BoxDecoration(
-                                color: const Color(0xFFF1F5F9),
-                                borderRadius: BorderRadius.circular(20),
-                              ),
-                              child: const Icon(
-                                Icons.task_alt_rounded,
-                                size: 34,
-                                color: Color(0xFF0F172A),
-                              ),
-                            ),
-                            const SizedBox(height: 16),
-                            Text(
-                              _taskFilter == 'priority'
-                                  ? 'No priority tasks yet'
-                                  : 'No tasks yet',
-                              style: const TextStyle(
-                                fontSize: 20,
-                                fontWeight: FontWeight.w800,
-                                color: Color(0xFF111827),
-                              ),
-                            ),
-                            const SizedBox(height: 8),
-                            Text(
-                              _taskFilter == 'priority'
-                                  ? 'Mark a task as priority to see it here.'
-                                  : 'Tap the + button and add your first task.',
-                              textAlign: TextAlign.center,
-                              style: TextStyle(
-                                fontSize: 14,
-                                color: Colors.grey.shade600,
-                              ),
-                            ),
-                          ],
-                        ),
+                if (tasks.isEmpty) {
+                  return Center(
+                    child: Container(
+                      width: double.infinity,
+                      padding: const EdgeInsets.all(28),
+                      decoration: BoxDecoration(
+                        color: Colors.white,
+                        borderRadius: BorderRadius.circular(24),
+                        border: Border.all(color: Colors.grey.shade200),
                       ),
-                    );
-                  }
+                      child: Column(
+                        mainAxisSize: MainAxisSize.min,
+                        children: [
+                          Container(
+                            width: 70,
+                            height: 70,
+                            decoration: BoxDecoration(
+                              color: const Color(0xFFF1F5F9),
+                              borderRadius: BorderRadius.circular(20),
+                            ),
+                            child: const Icon(
+                              Icons.task_alt_rounded,
+                              size: 34,
+                              color: Color(0xFF0F172A),
+                            ),
+                          ),
+                          const SizedBox(height: 16),
+                          Text(
+                            _selectedCategory == 'All'
+                                ? 'No tasks yet'
+                                : 'No $_selectedCategory tasks yet',
+                            style: const TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w800,
+                              color: Color(0xFF111827),
+                            ),
+                          ),
+                          const SizedBox(height: 8),
+                          Text(
+                            _selectedCategory == 'All'
+                                ? 'Tap the + button and add your first task.'
+                                : 'Add a task in $_selectedCategory to see it here.',
+                            textAlign: TextAlign.center,
+                            style: TextStyle(
+                              fontSize: 14,
+                              color: Colors.grey.shade600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  );
+                }
 
                   return ListView.builder(
                     padding: const EdgeInsets.only(bottom: 100),
@@ -999,13 +1018,6 @@ class _HomePageState extends State<HomePage> {
             ),
           ],
         ),
-      ),
-      floatingActionButton: FloatingActionButton(
-        onPressed: _showAddTaskSheet,
-        backgroundColor: const Color(0xFF111827),
-        foregroundColor: Colors.white,
-        elevation: 4,
-        child: const Icon(Icons.add_rounded),
       ),
     );
   }
