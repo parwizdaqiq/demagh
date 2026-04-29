@@ -123,7 +123,7 @@ class _LoginPageState extends State<LoginPage> {
           mainAxisAlignment: MainAxisAlignment.center,
           children: [
             const Text(
-              'Welcome to Demagh',
+              'Welcome to Hamkar',
               style: TextStyle(
                 fontSize: 26,
                 fontWeight: FontWeight.w800,

@@ -54,6 +54,18 @@ class _TasksPageState extends State<TasksPage> {
     });
   }
 
+  void _goToPreviousDay() {
+    setState(() {
+      _selectedDay = _selectedDay.subtract(const Duration(days: 1));
+    });
+  }
+
+  void _goToNextDay() {
+    setState(() {
+      _selectedDay = _selectedDay.add(const Duration(days: 1));
+    });
+  }
+
   String _friendlyDateLabel() {
     final now = DateTime.now();
     final today = DateTime(now.year, now.month, now.day);
@@ -70,6 +82,20 @@ class _TasksPageState extends State<TasksPage> {
     if (diff == 1) return 'Tomorrow';
 
     return '${_months[_selectedDay.month - 1]} ${_selectedDay.day}, ${_selectedDay.year}';
+  }
+
+  String _dayLabel(DateTime day) {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final check = DateTime(day.year, day.month, day.day);
+
+    final diff = check.difference(today).inDays;
+
+    if (diff == 0) return 'Today';
+    if (diff == -1) return 'Yesterday';
+    if (diff == 1) return 'Tomorrow';
+
+    return _weekDays[day.weekday - 1];
   }
 
   DateTime? _getTaskDate(Map<String, dynamic> task) {
@@ -101,11 +127,11 @@ class _TasksPageState extends State<TasksPage> {
   }
 
   List<DateTime> _daysAroundSelectedDay() {
-    return List.generate(14, (index) {
+    return List.generate(5, (index) {
       return DateTime(
         _selectedDay.year,
         _selectedDay.month,
-        _selectedDay.day + index - 3,
+        _selectedDay.day + index - 2,
       );
     });
   }
@@ -135,19 +161,18 @@ class _TasksPageState extends State<TasksPage> {
       },
       child: AnimatedContainer(
         duration: const Duration(milliseconds: 220),
-        width: 62,
-        margin: const EdgeInsets.only(right: 10),
-        padding: const EdgeInsets.symmetric(vertical: 12),
+        width: 48,
+        padding: const EdgeInsets.symmetric(vertical: 10),
         decoration: BoxDecoration(
           color: selected ? const Color(0xFF7C3AED) : Colors.white,
-          borderRadius: BorderRadius.circular(18),
+          borderRadius: BorderRadius.circular(16),
           boxShadow: [
             BoxShadow(
               color: selected
                   ? const Color(0xFF7C3AED).withValues(alpha: 0.30)
                   : Colors.black.withValues(alpha: 0.05),
-              blurRadius: 14,
-              offset: const Offset(0, 7),
+              blurRadius: 12,
+              offset: const Offset(0, 6),
             ),
           ],
         ),
@@ -156,17 +181,19 @@ class _TasksPageState extends State<TasksPage> {
             Text(
               '${day.day}',
               style: TextStyle(
-                fontSize: 22,
+                fontSize: 20,
                 fontWeight: FontWeight.w900,
                 color: selected ? Colors.white : const Color(0xFF111827),
               ),
             ),
             const SizedBox(height: 5),
             Text(
-              _weekDays[day.weekday - 1],
+              _dayLabel(day),
+              textAlign: TextAlign.center,
+              overflow: TextOverflow.ellipsis,
               style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.w700,
+                fontSize: 8,
+                fontWeight: FontWeight.w800,
                 color: selected ? Colors.white : Colors.grey.shade600,
               ),
             ),
@@ -279,7 +306,7 @@ class _TasksPageState extends State<TasksPage> {
 
   Widget _header() {
     return Container(
-      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      padding: const EdgeInsets.fromLTRB(12, 18, 12, 24),
       decoration: const BoxDecoration(
         gradient: LinearGradient(
           colors: [
@@ -323,12 +350,25 @@ class _TasksPageState extends State<TasksPage> {
               ],
             ),
             const SizedBox(height: 22),
-            SizedBox(
-              height: 94,
-              child: ListView(
-                scrollDirection: Axis.horizontal,
-                children: _daysAroundSelectedDay().map(_dateCard).toList(),
-              ),
+            Row(
+              children: [
+                IconButton(
+                  onPressed: _goToPreviousDay,
+                  icon: const Icon(Icons.chevron_left_rounded),
+                  color: Colors.white,
+                ),
+                Expanded(
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: _daysAroundSelectedDay().map(_dateCard).toList(),
+                  ),
+                ),
+                IconButton(
+                  onPressed: _goToNextDay,
+                  icon: const Icon(Icons.chevron_right_rounded),
+                  color: Colors.white,
+                ),
+              ],
             ),
           ],
         ),

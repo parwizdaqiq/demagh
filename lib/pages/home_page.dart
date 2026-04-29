@@ -277,7 +277,7 @@ class _HomePageState extends State<HomePage> {
             ],
           ),
           const Text(
-            'Demagh',
+            'Hamkar',
             style: TextStyle(
               color: Colors.white,
               fontSize: 34,
