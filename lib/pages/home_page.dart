@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
 import 'login_page.dart';
+import 'add_task_page.dart';
 
 class HomePage extends StatefulWidget {
   const HomePage({super.key});
@@ -885,140 +886,163 @@ Widget _buildFilterChips() {
           ),
         ],
       ),
-      body: Padding(
-        padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
-        child: Column(
-          children: [
-            _buildHeader(),
-            const SizedBox(height: 20),
-            Row(
-              children: [
-                const Text(
-                  'Your Tasks',
-                  style: TextStyle(
-                    fontSize: 20,
-                    fontWeight: FontWeight.w800,
-                    color: Color(0xFF111827),
-                  ),
-                ),
-                const Spacer(),
-                Container(
-                  padding: const EdgeInsets.symmetric(
-                    horizontal: 12,
-                    vertical: 7,
-                  ),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(100),
-                    border: Border.all(color: Colors.grey.shade200),
-                  ),
-                  child: const Text(
-                    'Synced',
-                    style: TextStyle(
-                      fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: Color(0xFF16A34A),
-                    ),
-                  ),
-                ),
-              ],
-            ),
-              const SizedBox(height: 12),
-              _buildFilterChips(),
-              const SizedBox(height: 14),
-              Expanded(
-                child: FutureBuilder<List<Map<String, dynamic>>>(
-                  future: fetchTasks(),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
+                  body: Padding(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 0),
+              child: Column(
+                children: [
+                  _buildHeader(),
+                  const SizedBox(height: 20),
 
-                    if (snapshot.hasError) {
-                      return Center(
-                        child: Text(
-                          'Something went wrong.\n${snapshot.error}',
-                          textAlign: TextAlign.center,
+                  Row(
+                    children: [
+                      const Text(
+                        'Your Tasks',
+                        style: TextStyle(
+                          fontSize: 20,
+                          fontWeight: FontWeight.w800,
+                          color: Color(0xFF111827),
                         ),
-                      );
-                    }
-                  final allTasks = snapshot.data ?? [];
-
-              final tasks = _selectedCategory == 'Priority'
-                  ? allTasks
-                      .where((task) =>
-                          task['priority'] == 'priority' || task['priority'] == 'high')
-                      .toList()
-                  : allTasks;
-
-                if (tasks.isEmpty) {
-                  return Center(
-                    child: Container(
-                      width: double.infinity,
-                      padding: const EdgeInsets.all(28),
-                      decoration: BoxDecoration(
-                        color: Colors.white,
-                        borderRadius: BorderRadius.circular(24),
-                        border: Border.all(color: Colors.grey.shade200),
                       ),
-                      child: Column(
-                        mainAxisSize: MainAxisSize.min,
-                        children: [
-                          Container(
-                            width: 70,
-                            height: 70,
-                            decoration: BoxDecoration(
-                              color: const Color(0xFFF1F5F9),
-                              borderRadius: BorderRadius.circular(20),
-                            ),
-                            child: const Icon(
-                              Icons.task_alt_rounded,
-                              size: 34,
-                              color: Color(0xFF0F172A),
-                            ),
+                      const Spacer(),
+                      Container(
+                        padding: const EdgeInsets.symmetric(
+                          horizontal: 12,
+                          vertical: 7,
+                        ),
+                        decoration: BoxDecoration(
+                          color: Colors.white,
+                          borderRadius: BorderRadius.circular(100),
+                          border: Border.all(color: Colors.grey.shade200),
+                        ),
+                        child: const Text(
+                          'Synced',
+                          style: TextStyle(
+                            fontSize: 12,
+                            fontWeight: FontWeight.w600,
+                            color: Color(0xFF16A34A),
                           ),
-                          const SizedBox(height: 16),
-                          Text(
-                            _selectedCategory == 'All'
-                                ? 'No tasks yet'
-                                : 'No $_selectedCategory tasks yet',
-                            style: const TextStyle(
-                              fontSize: 20,
-                              fontWeight: FontWeight.w800,
-                              color: Color(0xFF111827),
-                            ),
-                          ),
-                          const SizedBox(height: 8),
-                          Text(
-                            _selectedCategory == 'All'
-                                ? 'Tap the + button and add your first task.'
-                                : 'Add a task in $_selectedCategory to see it here.',
-                            textAlign: TextAlign.center,
-                            style: TextStyle(
-                              fontSize: 14,
-                              color: Colors.grey.shade600,
-                            ),
-                          ),
-                        ],
+                        ),
                       ),
+                    ],
+                  ),
+
+                  const SizedBox(height: 12),
+                  _buildFilterChips(),
+                  const SizedBox(height: 14),
+
+                  Expanded(
+                    child: FutureBuilder<List<Map<String, dynamic>>>(
+                      future: fetchTasks(),
+                      builder: (context, snapshot) {
+                        if (snapshot.connectionState == ConnectionState.waiting) {
+                          return const Center(child: CircularProgressIndicator());
+                        }
+
+                        if (snapshot.hasError) {
+                          return Center(
+                            child: Text(
+                              'Something went wrong.\n${snapshot.error}',
+                              textAlign: TextAlign.center,
+                            ),
+                          );
+                        }
+
+                        final allTasks = snapshot.data ?? [];
+
+                        final tasks = _selectedCategory == 'Priority'
+                            ? allTasks
+                                .where(
+                                  (task) =>
+                                      task['priority'] == 'priority' ||
+                                      task['priority'] == 'high',
+                                )
+                                .toList()
+                            : allTasks;
+
+                        if (tasks.isEmpty) {
+                          return Center(
+                            child: Container(
+                              width: double.infinity,
+                              padding: const EdgeInsets.all(28),
+                              decoration: BoxDecoration(
+                                color: Colors.white,
+                                borderRadius: BorderRadius.circular(24),
+                                border: Border.all(color: Colors.grey.shade200),
+                              ),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Container(
+                                    width: 70,
+                                    height: 70,
+                                    decoration: BoxDecoration(
+                                      color: const Color(0xFFF1F5F9),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: const Icon(
+                                      Icons.task_alt_rounded,
+                                      size: 34,
+                                      color: Color(0xFF0F172A),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 16),
+                                  Text(
+                                    _selectedCategory == 'All'
+                                        ? 'No tasks yet'
+                                        : 'No $_selectedCategory tasks yet',
+                                    style: const TextStyle(
+                                      fontSize: 20,
+                                      fontWeight: FontWeight.w800,
+                                      color: Color(0xFF111827),
+                                    ),
+                                  ),
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _selectedCategory == 'All'
+                                        ? 'Tap the + button and add your first task.'
+                                        : 'Add a task in $_selectedCategory to see it here.',
+                                    textAlign: TextAlign.center,
+                                    style: TextStyle(
+                                      fontSize: 14,
+                                      color: Colors.grey.shade600,
+                                    ),
+                                  ),
+                                ],
+                              ),
+                            ),
+                          );
+                        }
+
+                        return ListView.builder(
+                          padding: const EdgeInsets.only(bottom: 100),
+                          itemCount: tasks.length,
+                          itemBuilder: (context, index) {
+                            final task = tasks[index];
+                            return _buildTaskCard(task);
+                          },
+                        );
+                      },
                     ),
-                  );
-                }
-
-                  return ListView.builder(
-                    padding: const EdgeInsets.only(bottom: 100),
-                    itemCount: tasks.length,
-                    itemBuilder: (context, index) {
-                      final task = tasks[index];
-                      return _buildTaskCard(task);
-                    },
-                  );
-                },
+                  ),
+                ],
               ),
             ),
-          ],
-        ),
-      ),
-    );
-  }
-}
+
+            floatingActionButton: FloatingActionButton(
+              onPressed: () async {
+                await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => AddTaskPage()),
+                );
+
+                if (!mounted) return;
+                setState(() {});
+              },
+              backgroundColor: const Color(0xFF7C3AED),
+              foregroundColor: Colors.white,
+              shape: const CircleBorder(),
+              child: const Icon(Icons.add_rounded, size: 30),
+            ),
+          );
+        }
+      }

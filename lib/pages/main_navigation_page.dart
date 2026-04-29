@@ -41,14 +41,6 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
   Widget build(BuildContext context) {
     return Scaffold(
       body: _pages[_selectedIndex],
-      floatingActionButton: FloatingActionButton(
-        onPressed: _onAddPressed,
-        backgroundColor: const Color(0xFF7C3AED),
-        foregroundColor: Colors.white,
-        shape: const CircleBorder(),
-        child: const Icon(Icons.add, size: 32),
-      ),
-      floatingActionButtonLocation: FloatingActionButtonLocation.centerDocked,
       bottomNavigationBar: Container(
         height: 86,
         decoration: BoxDecoration(
@@ -66,7 +58,6 @@ class _MainNavigationPageState extends State<MainNavigationPage> {
           children: [
             _navItem(Icons.home_rounded, 'Home', 0),
             _navItem(Icons.grid_view_rounded, 'Projects', 1),
-            const SizedBox(width: 56),
             _navItem(Icons.calendar_month_rounded, 'Calendar', 2),
             _navItem(Icons.person_rounded, 'Profile', 3),
           ],

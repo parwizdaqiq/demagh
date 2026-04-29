@@ -12,29 +12,57 @@ class _AddTaskPageState extends State<AddTaskPage> {
   final _titleController = TextEditingController();
   final _descriptionController = TextEditingController();
 
-  String _selectedCategory = 'Personal';
+  String? _selectedCategory;
   String _selectedPriority = 'normal';
+  String _selectedRepeatType = 'none';
+
   DateTime? _selectedDueDate;
   TimeOfDay? _selectedTime;
 
-  final List<String> _categories = [
-    'Personal',
-    'Assignments',
-    'Meet',
-    'Job',
-  ];
+  List<String> _categories = [];
 
-final List<String> _priorities = [
-  'normal',
-  'priority'
-];
+  @override
+  void initState() {
+    super.initState();
+    _loadCategories();
+  }
+
+  Future<void> _loadCategories() async {
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
+    final response = await supabase
+        .from('categories')
+        .select('name')
+        .eq('user_id', user.id)
+        .order('created_at', ascending: true);
+
+    final loadedCategories = List<Map<String, dynamic>>.from(response)
+        .map((item) => item['name'].toString())
+        .toList();
+
+    if (!mounted) return;
+
+    setState(() {
+      _categories = loadedCategories;
+      _selectedCategory =
+          loadedCategories.isNotEmpty ? loadedCategories.first : null;
+    });
+  }
 
   Future<void> _pickDate() async {
+    if (_selectedRepeatType == 'daily') {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Daily tasks do not need a date')),
+      );
+      return;
+    }
+
     final pickedDate = await showDatePicker(
       context: context,
       firstDate: DateTime.now(),
       lastDate: DateTime(2035),
-      initialDate: DateTime.now(),
+      initialDate: _selectedDueDate ?? DateTime.now(),
     );
 
     if (pickedDate != null) {
@@ -47,7 +75,7 @@ final List<String> _priorities = [
   Future<void> _pickTime() async {
     final pickedTime = await showTimePicker(
       context: context,
-      initialTime: TimeOfDay.now(),
+      initialTime: _selectedTime ?? TimeOfDay.now(),
     );
 
     if (pickedTime != null) {
@@ -59,7 +87,6 @@ final List<String> _priorities = [
 
   Future<void> _saveTask() async {
     final user = supabase.auth.currentUser;
-
     if (user == null) return;
 
     final title = _titleController.text.trim();
@@ -72,28 +99,37 @@ final List<String> _priorities = [
       return;
     }
 
+    if (_selectedCategory == null) {
+      ScaffoldMessenger.of(context).showSnackBar(
+        const SnackBar(content: Text('Please create/select a project first')),
+      );
+      return;
+    }
+
     await supabase.from('tasks').insert({
       'title': title,
       'description': description,
       'category': _selectedCategory,
       'priority': _selectedPriority,
+      'repeat_type': _selectedRepeatType,
       'user_id': user.id,
       'is_completed': false,
-      'due_at': _selectedDueDate?.toIso8601String(),
+      'due_at': _selectedRepeatType == 'daily'
+          ? null
+          : _selectedDueDate?.toIso8601String(),
+      'specific_date': _selectedRepeatType == 'daily'
+          ? null
+          : _selectedDueDate?.toIso8601String(),
       'time': _selectedTime == null
           ? null
           : '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}',
     });
 
     if (!mounted) return;
-
     Navigator.pop(context, true);
   }
 
-  Widget _inputBox({
-    required String label,
-    required Widget child,
-  }) {
+  Widget _inputBox({required Widget child}) {
     return Container(
       margin: const EdgeInsets.only(bottom: 14),
       padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
@@ -112,9 +148,8 @@ final List<String> _priorities = [
         ? 'Choose due date'
         : '${_selectedDueDate!.year}-${_selectedDueDate!.month.toString().padLeft(2, '0')}-${_selectedDueDate!.day.toString().padLeft(2, '0')}';
 
-    final timeText = _selectedTime == null
-        ? 'Choose time'
-        : _selectedTime!.format(context);
+    final timeText =
+        _selectedTime == null ? 'Choose time' : _selectedTime!.format(context);
 
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
@@ -129,7 +164,6 @@ final List<String> _priorities = [
         child: Column(
           children: [
             _inputBox(
-              label: 'Title',
               child: TextField(
                 controller: _titleController,
                 decoration: const InputDecoration(
@@ -140,7 +174,6 @@ final List<String> _priorities = [
             ),
 
             _inputBox(
-              label: 'Description',
               child: TextField(
                 controller: _descriptionController,
                 maxLines: 3,
@@ -151,58 +184,139 @@ final List<String> _priorities = [
               ),
             ),
 
+            _categories.isEmpty
+                ? _inputBox(
+                    child: const Padding(
+                      padding: EdgeInsets.symmetric(vertical: 14),
+                      child: Text(
+                        'No projects available. Create one first from Projects page.',
+                      ),
+                    ),
+                  )
+                : _inputBox(
+                    child: DropdownButtonFormField<String>(
+                      value: _selectedCategory,
+                      decoration: const InputDecoration(
+                        labelText: 'Project',
+                        border: InputBorder.none,
+                      ),
+                      items: _categories.map((category) {
+                        return DropdownMenuItem(
+                          value: category,
+                          child: Text(category),
+                        );
+                      }).toList(),
+                      onChanged: (value) {
+                        if (value == null) return;
+                        setState(() {
+                          _selectedCategory = value;
+                        });
+                      },
+                    ),
+                  ),
+
             _inputBox(
-              label: 'Category',
-              child: DropdownButtonFormField<String>(
-                value: _selectedCategory,
-                decoration: const InputDecoration(
-                  labelText: 'Category',
-                  border: InputBorder.none,
-                ),
-                items: _categories.map((category) {
-                  return DropdownMenuItem(
-                    value: category,
-                    child: Text(category),
-                  );
-                }).toList(),
-                onChanged: (value) {
+              child: InkWell(
+                onTap: () {
                   setState(() {
-                    _selectedCategory = value!;
+                    _selectedPriority =
+                        _selectedPriority == 'priority' ? 'normal' : 'priority';
                   });
                 },
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _selectedPriority == 'priority'
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: _selectedPriority == 'priority'
+                            ? const Color(0xFFE11D48)
+                            : Colors.grey,
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Priority Task',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
 
             _inputBox(
-              label: 'Priority',
-              child: DropdownButtonFormField<String>(
-                value: _selectedPriority,
-                decoration: const InputDecoration(
-                  labelText: 'Priority',
-                  border: InputBorder.none,
-                ),
-                items: _priorities.map((priority) {
-                  return DropdownMenuItem(
-                    value: priority,
-                    child: Text(priority),
-                  );
-                }).toList(),
-                onChanged: (value) {
+              child: InkWell(
+                onTap: () {
                   setState(() {
-                    _selectedPriority = value!;
+                    if (_selectedRepeatType == 'daily') {
+                      _selectedRepeatType = 'none';
+                    } else {
+                      _selectedRepeatType = 'daily';
+                      _selectedDueDate = null;
+                    }
                   });
                 },
+                borderRadius: BorderRadius.circular(18),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Row(
+                    children: [
+                      Icon(
+                        _selectedRepeatType == 'daily'
+                            ? Icons.radio_button_checked
+                            : Icons.radio_button_off,
+                        color: _selectedRepeatType == 'daily'
+                            ? const Color(0xFF7C3AED)
+                            : Colors.grey,
+                      ),
+                      const SizedBox(width: 12),
+                      const Expanded(
+                        child: Text(
+                          'Repeat Daily',
+                          style: TextStyle(
+                            fontSize: 15,
+                            fontWeight: FontWeight.w600,
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
               ),
             ),
 
             ListTile(
-              tileColor: Colors.white,
+              tileColor: _selectedRepeatType == 'daily'
+                  ? Colors.grey.shade200
+                  : Colors.white,
               shape: RoundedRectangleBorder(
                 borderRadius: BorderRadius.circular(18),
               ),
-              leading: const Icon(Icons.calendar_month_rounded),
-              title: Text(dueDateText),
-              onTap: _pickDate,
+              leading: Icon(
+                Icons.calendar_month_rounded,
+                color: _selectedRepeatType == 'daily'
+                    ? Colors.grey
+                    : Colors.black,
+              ),
+              title: Text(
+                _selectedRepeatType == 'daily'
+                    ? 'Daily task (no date needed)'
+                    : dueDateText,
+                style: TextStyle(
+                  color: _selectedRepeatType == 'daily'
+                      ? Colors.grey
+                      : Colors.black,
+                ),
+              ),
+              onTap: _selectedRepeatType == 'daily' ? null : _pickDate,
             ),
 
             const SizedBox(height: 12),
