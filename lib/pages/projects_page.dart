@@ -10,19 +10,35 @@ class ProjectsPage extends StatefulWidget {
 }
 
 class _ProjectsPageState extends State<ProjectsPage> {
-  Future<List<String>> fetchCategories() async {
+  final List<String> _colorOptions = [
+    '#7C3AED',
+    '#F97316',
+    '#06B6D4',
+    '#22C55E',
+    '#EC4899',
+    '#6366F1',
+    '#EF4444',
+    '#F59E0B',
+  ];
+
+  Color _colorFromHex(String? hex) {
+    if (hex == null || hex.isEmpty) return const Color(0xFF7C3AED);
+
+    final cleanHex = hex.replaceAll('#', '');
+    return Color(int.parse('FF$cleanHex', radix: 16));
+  }
+
+  Future<List<Map<String, dynamic>>> fetchCategories() async {
     final user = supabase.auth.currentUser;
     if (user == null) return [];
 
     final response = await supabase
         .from('categories')
-        .select('name')
+        .select('name, color')
         .eq('user_id', user.id)
         .order('created_at', ascending: true);
 
-    return List<Map<String, dynamic>>.from(response)
-        .map((item) => item['name'].toString())
-        .toList();
+    return List<Map<String, dynamic>>.from(response);
   }
 
   Future<List<Map<String, dynamic>>> fetchTasks() async {
@@ -37,43 +53,95 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
   Future<void> _addCategory() async {
     final controller = TextEditingController();
+    String selectedColor = _colorOptions.first;
 
-    final name = await showDialog<String>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('New Project'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Project name',
-            hintText: '',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isEmpty) return;
-              Navigator.pop(context, value);
-            },
-            child: const Text('Create'),
-          ),
-        ],
-      ),
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('New Project'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Project name',
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: _colorOptions.map((hex) {
+                      final color = _colorFromHex(hex);
+                      final selected = selectedColor == hex;
+
+                      return GestureDetector(
+                        onTap: () {
+                          setDialogState(() {
+                            selectedColor = hex;
+                          });
+                        },
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selected ? Colors.black : Colors.white,
+                              width: selected ? 3 : 2,
+                            ),
+                          ),
+                          child: selected
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 18,
+                                )
+                              : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = controller.text.trim();
+                    if (name.isEmpty) return;
+
+                    Navigator.pop(context, {
+                      'name': name,
+                      'color': selectedColor,
+                    });
+                  },
+                  child: const Text('Create'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    if (name == null || name.isEmpty) return;
+    if (result == null) return;
 
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
     await supabase.from('categories').insert({
-      'name': name,
+      'name': result['name'],
+      'color': result['color'],
       'user_id': user.id,
     });
 
@@ -81,45 +149,104 @@ class _ProjectsPageState extends State<ProjectsPage> {
     setState(() {});
   }
 
-  Future<void> _editCategory(String oldName) async {
+  Future<void> _editCategory(Map<String, dynamic> categoryData) async {
+    final oldName = categoryData['name'].toString();
     final controller = TextEditingController(text: oldName);
+    String selectedColor = categoryData['color'] ?? _colorOptions.first;
 
-    final newName = await showDialog<String>(
+    final result = await showDialog<Map<String, String>>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Edit Project'),
-        content: TextField(
-          controller: controller,
-          autofocus: true,
-          decoration: const InputDecoration(
-            labelText: 'Project name',
-          ),
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () {
-              final value = controller.text.trim();
-              if (value.isEmpty) return;
-              Navigator.pop(context, value);
-            },
-            child: const Text('Save'),
-          ),
-        ],
-      ),
+      builder: (_) {
+        return StatefulBuilder(
+          builder: (context, setDialogState) {
+            return AlertDialog(
+              title: const Text('Edit Project'),
+              content: Column(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  TextField(
+                    controller: controller,
+                    autofocus: true,
+                    decoration: const InputDecoration(
+                      hintText: 'Project name',
+                    ),
+                  ),
+                  const SizedBox(height: 18),
+                  Wrap(
+                    spacing: 10,
+                    runSpacing: 10,
+                    children: _colorOptions.map((hex) {
+                      final color = _colorFromHex(hex);
+                      final selected = selectedColor == hex;
+
+                      return GestureDetector(
+                        onTap: () {
+                          setDialogState(() {
+                            selectedColor = hex;
+                          });
+                        },
+                        child: Container(
+                          width: 34,
+                          height: 34,
+                          decoration: BoxDecoration(
+                            color: color,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: selected ? Colors.black : Colors.white,
+                              width: selected ? 3 : 2,
+                            ),
+                          ),
+                          child: selected
+                              ? const Icon(
+                                  Icons.check,
+                                  color: Colors.white,
+                                  size: 18,
+                                )
+                              : null,
+                        ),
+                      );
+                    }).toList(),
+                  ),
+                ],
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.pop(context),
+                  child: const Text('Cancel'),
+                ),
+                ElevatedButton(
+                  onPressed: () {
+                    final name = controller.text.trim();
+                    if (name.isEmpty) return;
+
+                    Navigator.pop(context, {
+                      'name': name,
+                      'color': selectedColor,
+                    });
+                  },
+                  child: const Text('Save'),
+                ),
+              ],
+            );
+          },
+        );
+      },
     );
 
-    if (newName == null || newName == oldName) return;
+    if (result == null) return;
+
+    final newName = result['name']!;
+    final newColor = result['color']!;
 
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
     await supabase
         .from('categories')
-        .update({'name': newName})
+        .update({
+          'name': newName,
+          'color': newColor,
+        })
         .eq('user_id', user.id)
         .eq('name', oldName);
 
@@ -134,32 +261,6 @@ class _ProjectsPageState extends State<ProjectsPage> {
   }
 
   Future<void> _deleteCategory(String category) async {
-    final confirm = await showDialog<bool>(
-      context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Delete project?'),
-        content: Text(
-          'This will delete "$category" from your projects and remove it from the Add Task dropdown.',
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.pop(context, false),
-            child: const Text('Cancel'),
-          ),
-          ElevatedButton(
-            onPressed: () => Navigator.pop(context, true),
-            style: ElevatedButton.styleFrom(
-              backgroundColor: Colors.red,
-              foregroundColor: Colors.white,
-            ),
-            child: const Text('Delete'),
-          ),
-        ],
-      ),
-    );
-
-    if (confirm != true) return;
-
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
@@ -173,17 +274,128 @@ class _ProjectsPageState extends State<ProjectsPage> {
     setState(() {});
   }
 
-  Color categoryColor(String category) {
-    final colors = [
-      const Color(0xFF6366F1),
-      const Color(0xFFEC4899),
-      const Color(0xFF22C55E),
-      const Color(0xFFD946EF),
-      const Color(0xFFF97316),
-      const Color(0xFF06B6D4),
-    ];
+  Widget _projectCard({
+    required Map<String, dynamic> categoryData,
+    required int count,
+  }) {
+    final category = categoryData['name'].toString();
+    final color = _colorFromHex(categoryData['color']);
 
-    return colors[category.hashCode.abs() % colors.length];
+    return GestureDetector(
+      onTap: () {
+        Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => CategoryTasksPage(
+              category: category,
+              color: color,
+            ),
+          ),
+        );
+      },
+      child: Container(
+        padding: const EdgeInsets.all(16),
+        decoration: BoxDecoration(
+          gradient: LinearGradient(
+            colors: [
+              color.withValues(alpha: 0.95),
+              color.withValues(alpha: 0.75),
+            ],
+            begin: Alignment.topLeft,
+            end: Alignment.bottomRight,
+          ),
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: color.withValues(alpha: 0.25),
+              blurRadius: 14,
+              offset: const Offset(0, 6),
+            ),
+          ],
+        ),
+        child: Stack(
+          children: [
+            Positioned(
+              right: -10,
+              bottom: -10,
+              child: Icon(
+                Icons.folder_rounded,
+                size: 70,
+                color: Colors.white.withValues(alpha: 0.10),
+              ),
+            ),
+            Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Container(
+                      width: 34,
+                      height: 34,
+                      decoration: BoxDecoration(
+                        color: Colors.white.withValues(alpha: 0.25),
+                        borderRadius: BorderRadius.circular(10),
+                      ),
+                      child: const Icon(Icons.folder, color: Colors.white),
+                    ),
+                    Row(
+                      children: [
+                        GestureDetector(
+                          onTap: () => _editCategory(categoryData),
+                          child: const Icon(
+                            Icons.edit,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                        const SizedBox(width: 10),
+                        GestureDetector(
+                          onTap: () => _deleteCategory(category),
+                          child: const Icon(
+                            Icons.delete,
+                            size: 18,
+                            color: Colors.white,
+                          ),
+                        ),
+                      ],
+                    )
+                  ],
+                ),
+                const Spacer(),
+                Text(
+                  category,
+                  style: const TextStyle(
+                    color: Colors.white,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 6),
+                Container(
+                  padding: const EdgeInsets.symmetric(
+                    horizontal: 10,
+                    vertical: 4,
+                  ),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.25),
+                    borderRadius: BorderRadius.circular(999),
+                  ),
+                  child: Text(
+                    '$count Tasks',
+                    style: const TextStyle(
+                      color: Colors.white,
+                      fontSize: 12,
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
+                )
+              ],
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
@@ -204,7 +416,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
         backgroundColor: const Color(0xFF7C3AED),
         foregroundColor: Colors.white,
         shape: const CircleBorder(),
-        child: const Icon(Icons.add_rounded),
+        child: const Icon(Icons.add),
       ),
       body: FutureBuilder<List<dynamic>>(
         future: Future.wait([
@@ -212,7 +424,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
           fetchTasks(),
         ]),
         builder: (context, snapshot) {
-          final categories = snapshot.data?[0] as List<String>? ?? [];
+          final categories =
+              snapshot.data?[0] as List<Map<String, dynamic>>? ?? [];
           final tasks =
               snapshot.data?[1] as List<Map<String, dynamic>>? ?? [];
 
@@ -221,43 +434,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
           }
 
           if (categories.isEmpty) {
-            return Center(
-              child: Padding(
-                padding: const EdgeInsets.all(24),
-                child: Column(
-                  mainAxisAlignment: MainAxisAlignment.center,
-                  children: [
-                    const Icon(
-                      Icons.folder_open_rounded,
-                      size: 64,
-                      color: Colors.grey,
-                    ),
-                    const SizedBox(height: 14),
-                    const Text(
-                      'No projects yet',
-                      style: TextStyle(
-                        fontSize: 20,
-                        fontWeight: FontWeight.w800,
-                        color: Color(0xFF111827),
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Text(
-                      'Tap + to create your first project',
-                      textAlign: TextAlign.center,
-                      style: TextStyle(
-                        color: Colors.grey.shade600,
-                        fontWeight: FontWeight.w500,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            );
+            return const Center(child: Text('No projects yet'));
           }
 
           return GridView.builder(
-            padding: const EdgeInsets.all(18),
+            padding: const EdgeInsets.fromLTRB(18, 18, 18, 100),
             itemCount: categories.length,
             gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
               crossAxisCount: 2,
@@ -266,94 +447,15 @@ class _ProjectsPageState extends State<ProjectsPage> {
               childAspectRatio: 1.05,
             ),
             itemBuilder: (context, index) {
-              final category = categories[index];
-              final count =
-                  tasks.where((task) => task['category'] == category).length;
-              final color = categoryColor(category);
+              final categoryData = categories[index];
+              final category = categoryData['name'].toString();
 
-              return GestureDetector(
-                onTap: () {
-                  Navigator.push(
-                    context,
-                    MaterialPageRoute(
-                      builder: (_) => CategoryTasksPage(
-                        category: category,
-                        color: color,
-                      ),
-                    ),
-                  );
-                },
-                child: Container(
-                  padding: const EdgeInsets.all(18),
-                  decoration: BoxDecoration(
-                    color: Colors.white,
-                    borderRadius: BorderRadius.circular(8),
-                    boxShadow: [
-                      BoxShadow(
-                        color: Colors.black.withValues(alpha: 0.04),
-                        blurRadius: 10,
-                        offset: const Offset(0, 4),
-                      ),
-                    ],
-                  ),
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Row(
-                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                        children: [
-                          CircleAvatar(
-                            radius: 8,
-                            backgroundColor: color.withValues(alpha: 0.2),
-                            child: CircleAvatar(
-                              radius: 4,
-                              backgroundColor: color,
-                            ),
-                          ),
-                          Row(
-                            children: [
-                              GestureDetector(
-                                onTap: () => _editCategory(category),
-                                child: const Icon(
-                                  Icons.edit_outlined,
-                                  size: 18,
-                                  color: Colors.blue,
-                                ),
-                              ),
-                              const SizedBox(width: 10),
-                              GestureDetector(
-                                onTap: () => _deleteCategory(category),
-                                child: const Icon(
-                                  Icons.delete_outline_rounded,
-                                  size: 18,
-                                  color: Colors.red,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ],
-                      ),
-                      const Spacer(),
-                      Text(
-                        category,
-                        style: const TextStyle(
-                          fontSize: 15,
-                          fontWeight: FontWeight.w800,
-                          color: Color(0xFF111827),
-                        ),
-                      ),
-                      const SizedBox(height: 8),
-                      Text(
-                        '$count Tasks',
-                        style: TextStyle(
-                          fontSize: 13,
-                          color: Colors.grey.shade500,
-                          fontWeight: FontWeight.w600,
-                        ),
-                      ),
-                    ],
-                  ),
-                ),
+              final count =
+                  tasks.where((t) => t['category'] == category).length;
+
+              return _projectCard(
+                categoryData: categoryData,
+                count: count,
               );
             },
           );

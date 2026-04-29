@@ -2,7 +2,12 @@ import 'package:flutter/material.dart';
 import '../main.dart';
 
 class AddTaskPage extends StatefulWidget {
-  const AddTaskPage({super.key});
+  final Map<String, dynamic>? task;
+
+  const AddTaskPage({
+    super.key,
+    this.task,
+  });
 
   @override
   State<AddTaskPage> createState() => _AddTaskPageState();
@@ -21,10 +26,45 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
   List<String> _categories = [];
 
+  bool get _isEditMode => widget.task != null;
+
   @override
   void initState() {
     super.initState();
+    _fillEditData();
     _loadCategories();
+  }
+
+  void _fillEditData() {
+    final task = widget.task;
+    if (task == null) return;
+
+    _titleController.text = (task['title'] ?? '').toString();
+    _descriptionController.text = (task['description'] ?? '').toString();
+
+    _selectedCategory = task['category'];
+    _selectedPriority =
+        task['priority'] == 'priority' || task['priority'] == 'high'
+            ? 'priority'
+            : 'normal';
+
+    _selectedRepeatType = task['repeat_type'] ?? 'none';
+
+    final dateValue = task['due_at'] ?? task['specific_date'];
+    if (dateValue != null) {
+      final parsed = DateTime.tryParse(dateValue.toString());
+      if (parsed != null) {
+        _selectedDueDate = DateTime(parsed.year, parsed.month, parsed.day);
+      }
+    }
+
+    final timeValue = task['time'];
+    if (timeValue != null && timeValue.toString().contains(':')) {
+      final parts = timeValue.toString().split(':');
+      final hour = int.tryParse(parts[0]) ?? 0;
+      final minute = int.tryParse(parts[1]) ?? 0;
+      _selectedTime = TimeOfDay(hour: hour, minute: minute);
+    }
   }
 
   Future<void> _loadCategories() async {
@@ -45,8 +85,11 @@ class _AddTaskPageState extends State<AddTaskPage> {
 
     setState(() {
       _categories = loadedCategories;
-      _selectedCategory =
-          loadedCategories.isNotEmpty ? loadedCategories.first : null;
+
+      if (_selectedCategory != null &&
+          !_categories.contains(_selectedCategory)) {
+        _selectedCategory = null;
+      }
     });
   }
 
@@ -85,6 +128,12 @@ class _AddTaskPageState extends State<AddTaskPage> {
     }
   }
 
+  String? _formattedTime() {
+    if (_selectedTime == null) return null;
+
+    return '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}';
+  }
+
   Future<void> _saveTask() async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -99,31 +148,34 @@ class _AddTaskPageState extends State<AddTaskPage> {
       return;
     }
 
-    if (_selectedCategory == null) {
-      ScaffoldMessenger.of(context).showSnackBar(
-        const SnackBar(content: Text('Please create/select a project first')),
-      );
-      return;
-    }
-
-    await supabase.from('tasks').insert({
+    final taskData = {
       'title': title,
       'description': description,
       'category': _selectedCategory,
       'priority': _selectedPriority,
       'repeat_type': _selectedRepeatType,
       'user_id': user.id,
-      'is_completed': false,
       'due_at': _selectedRepeatType == 'daily'
           ? null
           : _selectedDueDate?.toIso8601String(),
       'specific_date': _selectedRepeatType == 'daily'
           ? null
           : _selectedDueDate?.toIso8601String(),
-      'time': _selectedTime == null
-          ? null
-          : '${_selectedTime!.hour.toString().padLeft(2, '0')}:${_selectedTime!.minute.toString().padLeft(2, '0')}',
-    });
+      'time': _formattedTime(),
+    };
+
+    if (_isEditMode) {
+      await supabase
+          .from('tasks')
+          .update(taskData)
+          .eq('id', widget.task!['id'])
+          .eq('user_id', user.id);
+    } else {
+      await supabase.from('tasks').insert({
+        ...taskData,
+        'is_completed': false,
+      });
+    }
 
     if (!mounted) return;
     Navigator.pop(context, true);
@@ -154,7 +206,7 @@ class _AddTaskPageState extends State<AddTaskPage> {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
-        title: const Text('New Task'),
+        title: Text(_isEditMode ? 'Edit Task' : 'New Task'),
         centerTitle: true,
         backgroundColor: const Color(0xFFF8FAFC),
         elevation: 0,
@@ -172,7 +224,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 ),
               ),
             ),
-
             _inputBox(
               child: TextField(
                 controller: _descriptionController,
@@ -183,38 +234,33 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 ),
               ),
             ),
-
-            _categories.isEmpty
-                ? _inputBox(
-                    child: const Padding(
-                      padding: EdgeInsets.symmetric(vertical: 14),
-                      child: Text(
-                        'No projects available. Create one first from Projects page.',
-                      ),
-                    ),
-                  )
-                : _inputBox(
-                    child: DropdownButtonFormField<String>(
-                      value: _selectedCategory,
-                      decoration: const InputDecoration(
-                        labelText: 'Project',
-                        border: InputBorder.none,
-                      ),
-                      items: _categories.map((category) {
-                        return DropdownMenuItem(
-                          value: category,
-                          child: Text(category),
-                        );
-                      }).toList(),
-                      onChanged: (value) {
-                        if (value == null) return;
-                        setState(() {
-                          _selectedCategory = value;
-                        });
-                      },
-                    ),
+            if (_categories.isNotEmpty)
+              _inputBox(
+                child: DropdownButtonFormField<String?>(
+                  value: _selectedCategory,
+                  decoration: const InputDecoration(
+                    labelText: 'Project (optional)',
+                    border: InputBorder.none,
                   ),
-
+                  items: [
+                    const DropdownMenuItem<String?>(
+                      value: null,
+                      child: Text('No project'),
+                    ),
+                    ..._categories.map((category) {
+                      return DropdownMenuItem<String?>(
+                        value: category,
+                        child: Text(category),
+                      );
+                    }),
+                  ],
+                  onChanged: (value) {
+                    setState(() {
+                      _selectedCategory = value;
+                    });
+                  },
+                ),
+              ),
             _inputBox(
               child: InkWell(
                 onTap: () {
@@ -251,7 +297,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 ),
               ),
             ),
-
             _inputBox(
               child: InkWell(
                 onTap: () {
@@ -292,7 +337,6 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 ),
               ),
             ),
-
             ListTile(
               tileColor: _selectedRepeatType == 'daily'
                   ? Colors.grey.shade200
@@ -310,17 +354,10 @@ class _AddTaskPageState extends State<AddTaskPage> {
                 _selectedRepeatType == 'daily'
                     ? 'Daily task (no date needed)'
                     : dueDateText,
-                style: TextStyle(
-                  color: _selectedRepeatType == 'daily'
-                      ? Colors.grey
-                      : Colors.black,
-                ),
               ),
               onTap: _selectedRepeatType == 'daily' ? null : _pickDate,
             ),
-
             const SizedBox(height: 12),
-
             ListTile(
               tileColor: Colors.white,
               shape: RoundedRectangleBorder(
@@ -330,16 +367,14 @@ class _AddTaskPageState extends State<AddTaskPage> {
               title: Text(timeText),
               onTap: _pickTime,
             ),
-
             const SizedBox(height: 24),
-
             SizedBox(
               width: double.infinity,
               height: 54,
               child: ElevatedButton.icon(
                 onPressed: _saveTask,
                 icon: const Icon(Icons.check_rounded),
-                label: const Text('Save Task'),
+                label: Text(_isEditMode ? 'Save Changes' : 'Save Task'),
                 style: ElevatedButton.styleFrom(
                   backgroundColor: const Color(0xFF7C3AED),
                   foregroundColor: Colors.white,

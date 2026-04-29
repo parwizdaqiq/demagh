@@ -1,5 +1,4 @@
 import 'package:flutter/material.dart';
-import 'package:table_calendar/table_calendar.dart';
 import '../main.dart';
 
 class TasksPage extends StatefulWidget {
@@ -10,8 +9,16 @@ class TasksPage extends StatefulWidget {
 }
 
 class _TasksPageState extends State<TasksPage> {
-  DateTime _focusedDay = DateTime.now();
   DateTime _selectedDay = DateTime.now();
+
+  final List<String> _months = const [
+    'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
+    'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
+  ];
+
+  final List<String> _weekDays = const [
+    'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
+  ];
 
   Future<List<Map<String, dynamic>>> fetchTasks() async {
     final user = supabase.auth.currentUser;
@@ -26,46 +33,319 @@ class _TasksPageState extends State<TasksPage> {
     return List<Map<String, dynamic>>.from(response);
   }
 
-DateTime? _getTaskDate(Map<String, dynamic> task) {
-  final dateValue = task['due_at'] ?? task['specific_date'];
+  Future<void> updateTaskCompletion(String id, bool value) async {
+    await supabase.from('tasks').update({'is_completed': value}).eq('id', id);
+    if (!mounted) return;
+    setState(() {});
+  }
 
-  if (dateValue == null) return null;
+  Future<void> _openCalendarPicker() async {
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: _selectedDay,
+      firstDate: DateTime(2020),
+      lastDate: DateTime(2035),
+    );
 
-  final parsed = DateTime.tryParse(dateValue.toString());
+    if (picked == null) return;
 
-  if (parsed == null) return null;
+    setState(() {
+      _selectedDay = DateTime(picked.year, picked.month, picked.day);
+    });
+  }
 
-  return DateTime(parsed.year, parsed.month, parsed.day);
-}
+  String _friendlyDateLabel() {
+    final now = DateTime.now();
+    final today = DateTime(now.year, now.month, now.day);
+    final selected = DateTime(
+      _selectedDay.year,
+      _selectedDay.month,
+      _selectedDay.day,
+    );
+
+    final diff = selected.difference(today).inDays;
+
+    if (diff == 0) return 'Today';
+    if (diff == -1) return 'Yesterday';
+    if (diff == 1) return 'Tomorrow';
+
+    return '${_months[_selectedDay.month - 1]} ${_selectedDay.day}, ${_selectedDay.year}';
+  }
+
+  DateTime? _getTaskDate(Map<String, dynamic> task) {
+    final dateValue = task['due_at'] ?? task['specific_date'];
+    if (dateValue == null) return null;
+
+    final parsed = DateTime.tryParse(dateValue.toString());
+    if (parsed == null) return null;
+
+    return DateTime(parsed.year, parsed.month, parsed.day);
+  }
+
+  bool _isSameDay(DateTime a, DateTime b) {
+    return a.year == b.year && a.month == b.month && a.day == b.day;
+  }
 
   List<Map<String, dynamic>> _tasksForDay(
-      List<Map<String, dynamic>> tasks, DateTime day) {
+    List<Map<String, dynamic>> tasks,
+    DateTime day,
+  ) {
     return tasks.where((task) {
+      if (task['repeat_type'] == 'daily') return true;
+
       final taskDate = _getTaskDate(task);
       if (taskDate == null) return false;
 
-      return isSameDay(taskDate, day);
+      return _isSameDay(taskDate, day);
     }).toList();
+  }
+
+  List<DateTime> _daysAroundSelectedDay() {
+    return List.generate(14, (index) {
+      return DateTime(
+        _selectedDay.year,
+        _selectedDay.month,
+        _selectedDay.day + index - 3,
+      );
+    });
+  }
+
+  String _taskTime(Map<String, dynamic> task) {
+    final time = task['time'];
+    if (time == null || time.toString().isEmpty) return 'No time';
+    return time.toString();
+  }
+
+  int _hourFromTask(Map<String, dynamic> task) {
+    final time = task['time'];
+    if (time == null || !time.toString().contains(':')) return 99;
+
+    final parts = time.toString().split(':');
+    return int.tryParse(parts[0]) ?? 99;
+  }
+
+  Widget _dateCard(DateTime day) {
+    final selected = _isSameDay(day, _selectedDay);
+
+    return GestureDetector(
+      onTap: () {
+        setState(() {
+          _selectedDay = day;
+        });
+      },
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
+        width: 62,
+        margin: const EdgeInsets.only(right: 10),
+        padding: const EdgeInsets.symmetric(vertical: 12),
+        decoration: BoxDecoration(
+          color: selected ? const Color(0xFF7C3AED) : Colors.white,
+          borderRadius: BorderRadius.circular(18),
+          boxShadow: [
+            BoxShadow(
+              color: selected
+                  ? const Color(0xFF7C3AED).withValues(alpha: 0.30)
+                  : Colors.black.withValues(alpha: 0.05),
+              blurRadius: 14,
+              offset: const Offset(0, 7),
+            ),
+          ],
+        ),
+        child: Column(
+          children: [
+            Text(
+              '${day.day}',
+              style: TextStyle(
+                fontSize: 22,
+                fontWeight: FontWeight.w900,
+                color: selected ? Colors.white : const Color(0xFF111827),
+              ),
+            ),
+            const SizedBox(height: 5),
+            Text(
+              _weekDays[day.weekday - 1],
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.w700,
+                color: selected ? Colors.white : Colors.grey.shade600,
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
+  }
+
+  Widget _taskTimelineCard(Map<String, dynamic> task) {
+    final isCompleted = task['is_completed'] ?? false;
+    final repeatType = task['repeat_type'] ?? 'none';
+    final isPriority =
+        task['priority'] == 'priority' || task['priority'] == 'high';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 14),
+      child: Row(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          SizedBox(
+            width: 58,
+            child: Padding(
+              padding: const EdgeInsets.only(top: 18),
+              child: Text(
+                _taskTime(task),
+                style: const TextStyle(
+                  color: Color(0xFF7C3AED),
+                  fontSize: 13,
+                  fontWeight: FontWeight.w900,
+                ),
+              ),
+            ),
+          ),
+          Expanded(
+            child: GestureDetector(
+              onTap: () async {
+                await updateTaskCompletion(task['id'], !isCompleted);
+              },
+              child: AnimatedContainer(
+                duration: const Duration(milliseconds: 250),
+                padding: const EdgeInsets.all(16),
+                decoration: BoxDecoration(
+                  color: isPriority
+                      ? const Color(0xFF7C3AED)
+                      : isCompleted
+                          ? const Color(0xFFF1F5F9)
+                          : const Color(0xFFEDE9FE),
+                  borderRadius: BorderRadius.circular(18),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withValues(alpha: 0.05),
+                      blurRadius: 14,
+                      offset: const Offset(0, 7),
+                    ),
+                  ],
+                ),
+                child: Row(
+                  children: [
+                    Icon(
+                      isCompleted
+                          ? Icons.check_circle_rounded
+                          : Icons.radio_button_unchecked_rounded,
+                      color: isPriority ? Colors.white : const Color(0xFF7C3AED),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: AnimatedOpacity(
+                        duration: const Duration(milliseconds: 200),
+                        opacity: isCompleted ? 0.55 : 1,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              task['title'] ?? '',
+                              style: TextStyle(
+                                color: isPriority
+                                    ? Colors.white
+                                    : const Color(0xFF111827),
+                                fontSize: 16,
+                                fontWeight: FontWeight.w900,
+                              ),
+                            ),
+                            const SizedBox(height: 6),
+                            Text(
+                              repeatType == 'daily'
+                                  ? '${_taskTime(task)} • Daily'
+                                  : _taskTime(task),
+                              style: TextStyle(
+                                color: isPriority
+                                    ? Colors.white.withValues(alpha: 0.75)
+                                    : Colors.grey.shade600,
+                                fontSize: 12,
+                                fontWeight: FontWeight.w700,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _header() {
+    return Container(
+      padding: const EdgeInsets.fromLTRB(20, 18, 20, 24),
+      decoration: const BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            Color(0xFF5B2EFF),
+            Color(0xFF8B2CF5),
+            Color(0xFFB832D4),
+          ],
+          begin: Alignment.topLeft,
+          end: Alignment.bottomRight,
+        ),
+        borderRadius: BorderRadius.vertical(
+          bottom: Radius.circular(32),
+        ),
+      ),
+      child: SafeArea(
+        bottom: false,
+        child: Column(
+          children: [
+            Row(
+              children: [
+                const SizedBox(width: 46),
+                const Expanded(
+                  child: Center(
+                    child: Text(
+                      'Calendar',
+                      style: TextStyle(
+                        color: Colors.white,
+                        fontWeight: FontWeight.w900,
+                      ),
+                    ),
+                  ),
+                ),
+                CircleAvatar(
+                  backgroundColor: Colors.white.withValues(alpha: 0.22),
+                  child: IconButton(
+                    onPressed: _openCalendarPicker,
+                    icon: const Icon(Icons.calendar_month_rounded),
+                    color: Colors.white,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 22),
+            SizedBox(
+              height: 94,
+              child: ListView(
+                scrollDirection: Axis.horizontal,
+                children: _daysAroundSelectedDay().map(_dateCard).toList(),
+              ),
+            ),
+          ],
+        ),
+      ),
+    );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      appBar: AppBar(
-        title: const Text(
-          'Calendar',
-          style: TextStyle(fontWeight: FontWeight.w800),
-        ),
-        centerTitle: true,
-        backgroundColor: const Color(0xFFF8FAFC),
-        elevation: 0,
-      ),
       body: FutureBuilder<List<Map<String, dynamic>>>(
         future: fetchTasks(),
         builder: (context, snapshot) {
           final allTasks = snapshot.data ?? [];
-          final selectedTasks = _tasksForDay(allTasks, _selectedDay);
+          final selectedTasks = _tasksForDay(allTasks, _selectedDay)
+            ..sort((a, b) => _hourFromTask(a).compareTo(_hourFromTask(b)));
 
           if (snapshot.connectionState == ConnectionState.waiting) {
             return const Center(child: CircularProgressIndicator());
@@ -73,63 +353,22 @@ DateTime? _getTaskDate(Map<String, dynamic> task) {
 
           return Column(
             children: [
-              // 🔥 CALENDAR
-              Container(
-                margin: const EdgeInsets.all(16),
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(24),
-                ),
-                child: TableCalendar(
-                  firstDay: DateTime.utc(2020),
-                  lastDay: DateTime.utc(2035),
-                  focusedDay: _focusedDay,
-                  selectedDayPredicate: (day) =>
-                      isSameDay(_selectedDay, day),
-                  eventLoader: (day) => _tasksForDay(allTasks, day),
-                  onDaySelected: (selectedDay, focusedDay) {
-                    setState(() {
-                      _selectedDay = selectedDay;
-                      _focusedDay = focusedDay;
-                    });
-                  },
-                  calendarStyle: const CalendarStyle(
-                    todayDecoration: BoxDecoration(
-                      color: Color(0xFFDDD6FE),
-                      shape: BoxShape.circle,
-                    ),
-                    selectedDecoration: BoxDecoration(
-                      color: Color(0xFF7C3AED),
-                      shape: BoxShape.circle,
-                    ),
-                    markerDecoration: BoxDecoration(
-                      color: Color(0xFFE11D48),
-                      shape: BoxShape.circle,
-                    ),
-                  ),
-                  headerStyle: const HeaderStyle(
-                    formatButtonVisible: false,
-                    titleCentered: true,
-                  ),
-                ),
-              ),
-
-              // 🔥 TITLE
+              _header(),
+              const SizedBox(height: 18),
               Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 16),
+                padding: const EdgeInsets.symmetric(horizontal: 20),
                 child: Row(
                   children: [
                     Text(
-                      'Tasks on ${_selectedDay.day}/${_selectedDay.month}/${_selectedDay.year}',
+                      _friendlyDateLabel(),
                       style: const TextStyle(
-                        fontSize: 18,
-                        fontWeight: FontWeight.w800,
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
                       ),
                     ),
                     const Spacer(),
                     Text(
-                      '${selectedTasks.length}',
+                      '${selectedTasks.length} tasks',
                       style: const TextStyle(
                         color: Color(0xFF7C3AED),
                         fontWeight: FontWeight.w800,
@@ -138,44 +377,23 @@ DateTime? _getTaskDate(Map<String, dynamic> task) {
                   ],
                 ),
               ),
-
-              const SizedBox(height: 10),
-
-              // 🔥 TASK LIST
+              const SizedBox(height: 16),
               Expanded(
                 child: selectedTasks.isEmpty
-                    ? const Center(child: Text('No tasks on this date'))
+                    ? Center(
+                        child: Text(
+                          'No tasks on this date',
+                          style: TextStyle(
+                            color: Colors.grey.shade600,
+                            fontWeight: FontWeight.w700,
+                          ),
+                        ),
+                      )
                     : ListView.builder(
-                        padding:
-                            const EdgeInsets.fromLTRB(16, 0, 16, 100),
+                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
                         itemCount: selectedTasks.length,
                         itemBuilder: (context, index) {
-                          final task = selectedTasks[index];
-
-                          return Container(
-                            margin: const EdgeInsets.only(bottom: 12),
-                            padding: const EdgeInsets.all(16),
-                            decoration: BoxDecoration(
-                              color: Colors.white,
-                              borderRadius:
-                                  BorderRadius.circular(18),
-                            ),
-                            child: Row(
-                              children: [
-                                const Icon(Icons.task_alt_rounded),
-                                const SizedBox(width: 12),
-                                Expanded(
-                                  child: Text(
-                                    task['title'] ?? '',
-                                    style: const TextStyle(
-                                      fontWeight: FontWeight.w700,
-                                    ),
-                                  ),
-                                ),
-                                Text(task['time'] ?? ''),
-                              ],
-                            ),
-                          );
+                          return _taskTimelineCard(selectedTasks[index]);
                         },
                       ),
               ),

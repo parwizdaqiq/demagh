@@ -18,7 +18,6 @@ class _ProfilePageState extends State<ProfilePage> {
     _profileFuture = fetchProfile();
   }
 
-  // Fetch user profile
   Future<Map<String, dynamic>?> fetchProfile() async {
     final user = supabase.auth.currentUser;
     if (user == null) return null;
@@ -36,7 +35,6 @@ class _ProfilePageState extends State<ProfilePage> {
     });
   }
 
-  // Logout
   Future<void> _logout(BuildContext context) async {
     await supabase.auth.signOut();
 
@@ -49,7 +47,6 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  // Edit name
   Future<void> _editName({
     required String first,
     required String last,
@@ -57,36 +54,143 @@ class _ProfilePageState extends State<ProfilePage> {
     final firstController = TextEditingController(text: first);
     final lastController = TextEditingController(text: last);
 
-    final confirm = await showDialog<bool>(
+    final saved = await showModalBottomSheet<bool>(
       context: context,
-      builder: (_) => AlertDialog(
-        title: const Text('Change Name'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          children: [
-            TextField(
-              controller: firstController,
-              decoration: const InputDecoration(labelText: 'First name'),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (context) {
+        return Padding(
+          padding: EdgeInsets.only(
+            bottom: MediaQuery.of(context).viewInsets.bottom,
+          ),
+          child: Container(
+            padding: const EdgeInsets.fromLTRB(20, 12, 20, 24),
+            decoration: const BoxDecoration(
+              color: Colors.white,
+              borderRadius: BorderRadius.vertical(
+                top: Radius.circular(30),
+              ),
             ),
-            const SizedBox(height: 10),
-            TextField(
-              controller: lastController,
-              decoration: const InputDecoration(labelText: 'Last name'),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  width: 44,
+                  height: 5,
+                  decoration: BoxDecoration(
+                    color: const Color(0xFFE5E7EB),
+                    borderRadius: BorderRadius.circular(99),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                Row(
+                  children: [
+                    Container(
+                      width: 46,
+                      height: 46,
+                      decoration: BoxDecoration(
+                        color: const Color(0xFFEDE9FE),
+                        borderRadius: BorderRadius.circular(16),
+                      ),
+                      child: const Icon(
+                        Icons.edit_rounded,
+                        color: Color(0xFF7C3AED),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    const Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            'Change Name',
+                            style: TextStyle(
+                              fontSize: 20,
+                              fontWeight: FontWeight.w900,
+                            ),
+                          ),
+                          SizedBox(height: 3),
+                          Text(
+                            'Update your profile information',
+                            style: TextStyle(
+                              color: Colors.grey,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 22),
+                TextField(
+                  controller: firstController,
+                  decoration: InputDecoration(
+                    labelText: 'First name',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  controller: lastController,
+                  decoration: InputDecoration(
+                    labelText: 'Last name',
+                    filled: true,
+                    fillColor: const Color(0xFFF8FAFC),
+                    border: OutlineInputBorder(
+                      borderRadius: BorderRadius.circular(18),
+                      borderSide: BorderSide.none,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 22),
+                SizedBox(
+                  width: double.infinity,
+                  height: 54,
+                  child: ElevatedButton(
+                    onPressed: () => Navigator.pop(context, true),
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: const Color(0xFF7C3AED),
+                      foregroundColor: Colors.white,
+                      elevation: 0,
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(18),
+                      ),
+                    ),
+                    child: const Text(
+                      'Save Changes',
+                      style: TextStyle(
+                        fontWeight: FontWeight.w800,
+                        fontSize: 16,
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
+                SizedBox(
+                  width: double.infinity,
+                  height: 50,
+                  child: TextButton(
+                    onPressed: () => Navigator.pop(context, false),
+                    child: const Text(
+                      'Cancel',
+                      style: TextStyle(fontWeight: FontWeight.w800),
+                    ),
+                  ),
+                ),
+              ],
             ),
-          ],
-        ),
-        actions: [
-          TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
-          ElevatedButton(
-              onPressed: () => Navigator.pop(context, true),
-              child: const Text('Save')),
-        ],
-      ),
+          ),
+        );
+      },
     );
 
-    if (confirm != true) return;
+    if (saved != true) return;
 
     final user = supabase.auth.currentUser;
     if (user == null) return;
@@ -99,22 +203,20 @@ class _ProfilePageState extends State<ProfilePage> {
     _refreshProfile();
   }
 
-  // Delete account
   Future<void> _deleteAccount(BuildContext context) async {
     final confirm = await showDialog<bool>(
       context: context,
       builder: (_) => AlertDialog(
         title: const Text('Delete Account'),
-        content: const Text(
-            'Are you sure you want to delete your account? This cannot be undone.'),
+        content: const Text('This action cannot be undone'),
         actions: [
           TextButton(
-              onPressed: () => Navigator.pop(context, false),
-              child: const Text('Cancel')),
+            onPressed: () => Navigator.pop(context, false),
+            child: const Text('Cancel'),
+          ),
           TextButton(
             onPressed: () => Navigator.pop(context, true),
-            child: const Text('Delete',
-                style: TextStyle(color: Colors.red)),
+            child: const Text('Delete', style: TextStyle(color: Colors.red)),
           ),
         ],
       ),
@@ -133,75 +235,70 @@ class _ProfilePageState extends State<ProfilePage> {
     );
   }
 
-  Widget _tile(String title, String value, IconData icon) {
+  Widget _tile({
+    required String title,
+    required String value,
+    required IconData icon,
+    required Color color,
+    VoidCallback? onTap,
+    bool danger = false,
+  }) {
     return Container(
-      margin: const EdgeInsets.only(bottom: 12),
-      padding: const EdgeInsets.all(16),
       decoration: BoxDecoration(
         color: Colors.white,
-        borderRadius: BorderRadius.circular(16),
+        border: Border(bottom: BorderSide(color: Colors.grey.shade100)),
       ),
-      child: Row(
-        children: [
-          Icon(icon),
-          const SizedBox(width: 12),
-          Expanded(
-            child: Column(
-                crossAxisAlignment: CrossAxisAlignment.start,
-                children: [
-                  Text(title,
-                      style: const TextStyle(
-                          fontSize: 12, color: Colors.grey)),
-                  Text(value,
-                      style: const TextStyle(
-                          fontSize: 16,
-                          fontWeight: FontWeight.bold)),
-                ]),
-          )
-        ],
+      child: ListTile(
+        onTap: onTap,
+        leading: Icon(icon, color: color),
+        title: Text(
+          title,
+          style: TextStyle(
+            fontWeight: FontWeight.w800,
+            color: danger ? Colors.red : Colors.black,
+          ),
+        ),
+        subtitle: value.isEmpty ? null : Text(value),
+        trailing: onTap != null ? const Icon(Icons.chevron_right) : null,
       ),
     );
   }
 
-  Widget _button({
-    required String text,
-    required VoidCallback onPressed,
-    required Color color,
-    IconData? icon,
-    bool outline = false,
-  }) {
-    return SizedBox(
-      width: double.infinity,
-      height: 50,
-      child: outline
-          ? OutlinedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon),
-              label: Text(text),
-              style: OutlinedButton.styleFrom(
-                foregroundColor: color,
-              ),
-            )
-          : ElevatedButton.icon(
-              onPressed: onPressed,
-              icon: Icon(icon),
-              label: Text(text),
-              style: ElevatedButton.styleFrom(
-                backgroundColor: color,
-                foregroundColor: Colors.white,
-              ),
-            ),
+  Widget _group(List<Widget> children) {
+    return ClipRRect(
+      borderRadius: BorderRadius.circular(18),
+      child: Column(children: children),
+    );
+  }
+
+  Widget _section(String text) {
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(4, 20, 4, 6),
+      child: Align(
+        alignment: Alignment.centerLeft,
+        child: Text(
+          text.toUpperCase(),
+          style: TextStyle(
+            fontSize: 12,
+            fontWeight: FontWeight.w800,
+            color: Colors.grey.shade500,
+          ),
+        ),
+      ),
     );
   }
 
   @override
   Widget build(BuildContext context) {
     return Scaffold(
-      backgroundColor: const Color(0xFFF8FAFC),
+      backgroundColor: const Color(0xFFF2F4F7),
       appBar: AppBar(
-        title: const Text('Profile'),
+        title: const Text(
+          'Settings',
+          style: TextStyle(fontWeight: FontWeight.w900),
+        ),
         centerTitle: true,
-        backgroundColor: const Color(0xFFF8FAFC),
+        backgroundColor: const Color(0xFFF2F4F7),
         elevation: 0,
       ),
       body: FutureBuilder<Map<String, dynamic>?>(
@@ -217,41 +314,58 @@ class _ProfilePageState extends State<ProfilePage> {
           final email = data['email'] ?? '';
 
           return SingleChildScrollView(
-            padding: const EdgeInsets.all(16),
+            padding: const EdgeInsets.fromLTRB(16, 10, 16, 100),
             child: Column(
               children: [
-                _tile('First Name', first, Icons.person),
-                _tile('Last Name', last, Icons.badge),
-                _tile('Email', email, Icons.email),
-
-                const SizedBox(height: 16),
-
-                _button(
-                  text: 'Change Name',
-                  icon: Icons.edit,
-                  color: Colors.black,
-                  onPressed: () =>
-                      _editName(first: first, last: last),
-                ),
-
-                const SizedBox(height: 10),
-
-                _button(
-                  text: 'Delete Account',
-                  icon: Icons.delete,
-                  color: Colors.red,
-                  outline: true,
-                  onPressed: () => _deleteAccount(context),
-                ),
-
-                const SizedBox(height: 10),
-
-                _button(
-                  text: 'Logout',
-                  icon: Icons.logout,
-                  color: Colors.red,
-                  onPressed: () => _logout(context),
-                ),
+                _section('Account'),
+                _group([
+                  _tile(
+                    title: 'First Name',
+                    value: first,
+                    icon: Icons.person,
+                    color: const Color(0xFF7C3AED),
+                  ),
+                  _tile(
+                    title: 'Last Name',
+                    value: last,
+                    icon: Icons.badge,
+                    color: const Color(0xFF06B6D4),
+                  ),
+                  _tile(
+                    title: 'Email',
+                    value: email,
+                    icon: Icons.email,
+                    color: const Color(0xFF22C55E),
+                  ),
+                ]),
+                _section('Settings'),
+                _group([
+                  _tile(
+                    title: 'Change Name',
+                    value: 'Update your name',
+                    icon: Icons.edit,
+                    color: Colors.black,
+                    onTap: () => _editName(first: first, last: last),
+                  ),
+                  _tile(
+                    title: 'Logout',
+                    value: '',
+                    icon: Icons.logout,
+                    color: Colors.orange,
+                    onTap: () => _logout(context),
+                  ),
+                ]),
+                _section('Danger'),
+                _group([
+                  _tile(
+                    title: 'Delete Account',
+                    value: '',
+                    icon: Icons.delete,
+                    color: Colors.red,
+                    danger: true,
+                    onTap: () => _deleteAccount(context),
+                  ),
+                ]),
               ],
             ),
           );
