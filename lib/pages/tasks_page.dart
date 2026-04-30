@@ -1,5 +1,7 @@
 import 'package:flutter/material.dart';
 import '../main.dart';
+import 'add_task_page.dart';
+import '../widgets/premium_task_card.dart';
 
 class TasksPage extends StatefulWidget {
   const TasksPage({super.key});
@@ -35,8 +37,10 @@ class _TasksPageState extends State<TasksPage> {
 
   Future<void> updateTaskCompletion(String id, bool value) async {
     await supabase.from('tasks').update({'is_completed': value}).eq('id', id);
-    if (!mounted) return;
-    setState(() {});
+  }
+
+  Future<void> deleteTask(String id) async {
+    await supabase.from('tasks').delete().eq('id', id);
   }
 
   Future<void> _openCalendarPicker() async {
@@ -136,12 +140,6 @@ class _TasksPageState extends State<TasksPage> {
     });
   }
 
-  String _taskTime(Map<String, dynamic> task) {
-    final time = task['time'];
-    if (time == null || time.toString().isEmpty) return 'No time';
-    return time.toString();
-  }
-
   int _hourFromTask(Map<String, dynamic> task) {
     final time = task['time'];
     if (time == null || !time.toString().contains(':')) return 99;
@@ -199,107 +197,6 @@ class _TasksPageState extends State<TasksPage> {
             ),
           ],
         ),
-      ),
-    );
-  }
-
-  Widget _taskTimelineCard(Map<String, dynamic> task) {
-    final isCompleted = task['is_completed'] ?? false;
-    final repeatType = task['repeat_type'] ?? 'none';
-    final isPriority =
-        task['priority'] == 'priority' || task['priority'] == 'high';
-
-    return Container(
-      margin: const EdgeInsets.only(bottom: 14),
-      child: Row(
-        crossAxisAlignment: CrossAxisAlignment.start,
-        children: [
-          SizedBox(
-            width: 58,
-            child: Padding(
-              padding: const EdgeInsets.only(top: 18),
-              child: Text(
-                _taskTime(task),
-                style: const TextStyle(
-                  color: Color(0xFF7C3AED),
-                  fontSize: 13,
-                  fontWeight: FontWeight.w900,
-                ),
-              ),
-            ),
-          ),
-          Expanded(
-            child: GestureDetector(
-              onTap: () async {
-                await updateTaskCompletion(task['id'], !isCompleted);
-              },
-              child: AnimatedContainer(
-                duration: const Duration(milliseconds: 250),
-                padding: const EdgeInsets.all(16),
-                decoration: BoxDecoration(
-                  color: isPriority
-                      ? const Color(0xFF7C3AED)
-                      : isCompleted
-                          ? const Color(0xFFF1F5F9)
-                          : const Color(0xFFEDE9FE),
-                  borderRadius: BorderRadius.circular(18),
-                  boxShadow: [
-                    BoxShadow(
-                      color: Colors.black.withValues(alpha: 0.05),
-                      blurRadius: 14,
-                      offset: const Offset(0, 7),
-                    ),
-                  ],
-                ),
-                child: Row(
-                  children: [
-                    Icon(
-                      isCompleted
-                          ? Icons.check_circle_rounded
-                          : Icons.radio_button_unchecked_rounded,
-                      color: isPriority ? Colors.white : const Color(0xFF7C3AED),
-                    ),
-                    const SizedBox(width: 12),
-                    Expanded(
-                      child: AnimatedOpacity(
-                        duration: const Duration(milliseconds: 200),
-                        opacity: isCompleted ? 0.55 : 1,
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(
-                              task['title'] ?? '',
-                              style: TextStyle(
-                                color: isPriority
-                                    ? Colors.white
-                                    : const Color(0xFF111827),
-                                fontSize: 16,
-                                fontWeight: FontWeight.w900,
-                              ),
-                            ),
-                            const SizedBox(height: 6),
-                            Text(
-                              repeatType == 'daily'
-                                  ? '${_taskTime(task)} • Daily'
-                                  : _taskTime(task),
-                              style: TextStyle(
-                                color: isPriority
-                                    ? Colors.white.withValues(alpha: 0.75)
-                                    : Colors.grey.shade600,
-                                fontSize: 12,
-                                fontWeight: FontWeight.w700,
-                              ),
-                            ),
-                          ],
-                        ),
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-            ),
-          ),
-        ],
       ),
     );
   }
@@ -376,6 +273,35 @@ class _TasksPageState extends State<TasksPage> {
     );
   }
 
+  Widget _premiumTask(Map<String, dynamic> task) {
+    return PremiumTaskCard(
+      task: task,
+      accentColor: const Color(0xFF7C3AED),
+      onTap: () async {
+        final updated = await Navigator.push(
+          context,
+          MaterialPageRoute(
+            builder: (_) => AddTaskPage(task: task),
+          ),
+        );
+
+        if (updated == true && mounted) {
+          setState(() {});
+        }
+      },
+      onDelete: () async {
+        await deleteTask(task['id']);
+        if (!mounted) return;
+        setState(() {});
+      },
+      onCompletedChanged: (value) async {
+        await updateTaskCompletion(task['id'], value);
+        if (!mounted) return;
+        setState(() {});
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
     return Scaffold(
@@ -433,7 +359,7 @@ class _TasksPageState extends State<TasksPage> {
                         padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
                         itemCount: selectedTasks.length,
                         itemBuilder: (context, index) {
-                          return _taskTimelineCard(selectedTasks[index]);
+                          return _premiumTask(selectedTasks[index]);
                         },
                       ),
               ),
