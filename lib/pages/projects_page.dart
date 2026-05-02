@@ -21,6 +21,21 @@ class _ProjectsPageState extends State<ProjectsPage> {
     '#F59E0B',
   ];
 
+  List<Map<String, dynamic>> _categories = [];
+  List<Map<String, dynamic>> _tasks = [];
+
+  bool _isFirstLoading = true;
+  bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadData(firstLoad: true);
+    });
+  }
+
   Color _colorFromHex(String? hex) {
     if (hex == null || hex.isEmpty) return const Color(0xFF7C3AED);
 
@@ -51,6 +66,41 @@ class _ProjectsPageState extends State<ProjectsPage> {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  Future<void> _loadData({bool firstLoad = false}) async {
+    if (!mounted) return;
+
+    if (!firstLoad) {
+      setState(() {
+        _isRefreshing = true;
+      });
+    }
+
+    try {
+      final categories = await fetchCategories();
+      final tasks = await fetchTasks();
+
+      if (!mounted) return;
+
+      setState(() {
+        _categories = categories;
+        _tasks = tasks;
+        _isFirstLoading = false;
+        _isRefreshing = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isFirstLoading = false;
+        _isRefreshing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load projects: $e')),
+      );
+    }
+  }
+
   Future<void> _addCategory() async {
     final controller = TextEditingController();
     String selectedColor = _colorOptions.first;
@@ -62,53 +112,55 @@ class _ProjectsPageState extends State<ProjectsPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('New Project'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Project name',
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Project name',
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: _colorOptions.map((hex) {
-                      final color = _colorFromHex(hex);
-                      final selected = selectedColor == hex;
+                    const SizedBox(height: 18),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _colorOptions.map((hex) {
+                        final color = _colorFromHex(hex);
+                        final selected = selectedColor == hex;
 
-                      return GestureDetector(
-                        onTap: () {
-                          setDialogState(() {
-                            selectedColor = hex;
-                          });
-                        },
-                        child: Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selected ? Colors.black : Colors.white,
-                              width: selected ? 3 : 2,
+                        return GestureDetector(
+                          onTap: () {
+                            setDialogState(() {
+                              selectedColor = hex;
+                            });
+                          },
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: selected ? Colors.black : Colors.white,
+                                width: selected ? 3 : 2,
+                              ),
                             ),
+                            child: selected
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 18,
+                                  )
+                                : null,
                           ),
-                          child: selected
-                              ? const Icon(
-                                  Icons.check,
-                                  color: Colors.white,
-                                  size: 18,
-                                )
-                              : null,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -139,14 +191,15 @@ class _ProjectsPageState extends State<ProjectsPage> {
     final user = supabase.auth.currentUser;
     if (user == null) return;
 
+    setState(() => _isRefreshing = true);
+
     await supabase.from('categories').insert({
       'name': result['name'],
       'color': result['color'],
       'user_id': user.id,
     });
 
-    if (!mounted) return;
-    setState(() {});
+    await _loadData();
   }
 
   Future<void> _editCategory(Map<String, dynamic> categoryData) async {
@@ -161,53 +214,55 @@ class _ProjectsPageState extends State<ProjectsPage> {
           builder: (context, setDialogState) {
             return AlertDialog(
               title: const Text('Edit Project'),
-              content: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  TextField(
-                    controller: controller,
-                    autofocus: true,
-                    decoration: const InputDecoration(
-                      hintText: 'Project name',
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    TextField(
+                      controller: controller,
+                      autofocus: true,
+                      decoration: const InputDecoration(
+                        hintText: 'Project name',
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 18),
-                  Wrap(
-                    spacing: 10,
-                    runSpacing: 10,
-                    children: _colorOptions.map((hex) {
-                      final color = _colorFromHex(hex);
-                      final selected = selectedColor == hex;
+                    const SizedBox(height: 18),
+                    Wrap(
+                      spacing: 10,
+                      runSpacing: 10,
+                      children: _colorOptions.map((hex) {
+                        final color = _colorFromHex(hex);
+                        final selected = selectedColor == hex;
 
-                      return GestureDetector(
-                        onTap: () {
-                          setDialogState(() {
-                            selectedColor = hex;
-                          });
-                        },
-                        child: Container(
-                          width: 34,
-                          height: 34,
-                          decoration: BoxDecoration(
-                            color: color,
-                            shape: BoxShape.circle,
-                            border: Border.all(
-                              color: selected ? Colors.black : Colors.white,
-                              width: selected ? 3 : 2,
+                        return GestureDetector(
+                          onTap: () {
+                            setDialogState(() {
+                              selectedColor = hex;
+                            });
+                          },
+                          child: Container(
+                            width: 34,
+                            height: 34,
+                            decoration: BoxDecoration(
+                              color: color,
+                              shape: BoxShape.circle,
+                              border: Border.all(
+                                color: selected ? Colors.black : Colors.white,
+                                width: selected ? 3 : 2,
+                              ),
                             ),
+                            child: selected
+                                ? const Icon(
+                                    Icons.check,
+                                    color: Colors.white,
+                                    size: 18,
+                                  )
+                                : null,
                           ),
-                          child: selected
-                              ? const Icon(
-                                  Icons.check,
-                                  color: Colors.white,
-                                  size: 18,
-                                )
-                              : null,
-                        ),
-                      );
-                    }).toList(),
-                  ),
-                ],
+                        );
+                      }).toList(),
+                    ),
+                  ],
+                ),
               ),
               actions: [
                 TextButton(
@@ -235,11 +290,13 @@ class _ProjectsPageState extends State<ProjectsPage> {
 
     if (result == null) return;
 
+    final user = supabase.auth.currentUser;
+    if (user == null) return;
+
     final newName = result['name']!;
     final newColor = result['color']!;
 
-    final user = supabase.auth.currentUser;
-    if (user == null) return;
+    setState(() => _isRefreshing = true);
 
     await supabase
         .from('categories')
@@ -256,13 +313,14 @@ class _ProjectsPageState extends State<ProjectsPage> {
         .eq('user_id', user.id)
         .eq('category', oldName);
 
-    if (!mounted) return;
-    setState(() {});
+    await _loadData();
   }
 
   Future<void> _deleteCategory(String category) async {
     final user = supabase.auth.currentUser;
     if (user == null) return;
+
+    setState(() => _isRefreshing = true);
 
     await supabase
         .from('categories')
@@ -270,8 +328,11 @@ class _ProjectsPageState extends State<ProjectsPage> {
         .eq('user_id', user.id)
         .eq('name', category);
 
-    if (!mounted) return;
-    setState(() {});
+    await _loadData();
+  }
+
+  int _taskCount(String category) {
+    return _tasks.where((task) => task['category'] == category).length;
   }
 
   Widget _projectCard({
@@ -282,8 +343,8 @@ class _ProjectsPageState extends State<ProjectsPage> {
     final color = _colorFromHex(categoryData['color']);
 
     return GestureDetector(
-      onTap: () {
-        Navigator.push(
+      onTap: () async {
+        await Navigator.push(
           context,
           MaterialPageRoute(
             builder: (_) => CategoryTasksPage(
@@ -292,8 +353,12 @@ class _ProjectsPageState extends State<ProjectsPage> {
             ),
           ),
         );
+
+        if (!mounted) return;
+        await _loadData();
       },
-      child: Container(
+      child: AnimatedContainer(
+        duration: const Duration(milliseconds: 220),
         padding: const EdgeInsets.all(16),
         decoration: BoxDecoration(
           gradient: LinearGradient(
@@ -328,7 +393,6 @@ class _ProjectsPageState extends State<ProjectsPage> {
               crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
                   children: [
                     Container(
                       width: 34,
@@ -339,32 +403,31 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       ),
                       child: const Icon(Icons.folder, color: Colors.white),
                     ),
-                    Row(
-                      children: [
-                        GestureDetector(
-                          onTap: () => _editCategory(categoryData),
-                          child: const Icon(
-                            Icons.edit,
-                            size: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                        const SizedBox(width: 10),
-                        GestureDetector(
-                          onTap: () => _deleteCategory(category),
-                          child: const Icon(
-                            Icons.delete,
-                            size: 18,
-                            color: Colors.white,
-                          ),
-                        ),
-                      ],
-                    )
+                    const Spacer(),
+                    GestureDetector(
+                      onTap: () => _editCategory(categoryData),
+                      child: const Icon(
+                        Icons.edit,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    GestureDetector(
+                      onTap: () => _deleteCategory(category),
+                      child: const Icon(
+                        Icons.delete,
+                        size: 18,
+                        color: Colors.white,
+                      ),
+                    ),
                   ],
                 ),
                 const Spacer(),
                 Text(
                   category,
+                  maxLines: 1,
+                  overflow: TextOverflow.ellipsis,
                   style: const TextStyle(
                     color: Colors.white,
                     fontSize: 15,
@@ -389,7 +452,7 @@ class _ProjectsPageState extends State<ProjectsPage> {
                       fontWeight: FontWeight.w600,
                     ),
                   ),
-                )
+                ),
               ],
             ),
           ],
@@ -398,8 +461,92 @@ class _ProjectsPageState extends State<ProjectsPage> {
     );
   }
 
+  Widget _updatingBadge() {
+    return Positioned(
+      top: 12,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Updating...',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Text(
+        'No projects yet',
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontWeight: FontWeight.w800,
+        ),
+      ),
+    );
+  }
+
+  Widget _grid() {
+    if (_categories.isEmpty) return _emptyState();
+
+    return GridView.builder(
+      padding: const EdgeInsets.fromLTRB(18, 18, 18, 100),
+      itemCount: _categories.length,
+      gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
+        crossAxisCount: 2,
+        crossAxisSpacing: 14,
+        mainAxisSpacing: 14,
+        childAspectRatio: 1.05,
+      ),
+      itemBuilder: (context, index) {
+        final categoryData = _categories[index];
+        final category = categoryData['name'].toString();
+
+        return _projectCard(
+          categoryData: categoryData,
+          count: _taskCount(category),
+        );
+      },
+    );
+  }
+
   @override
   Widget build(BuildContext context) {
+    if (_isFirstLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8FAFC),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       appBar: AppBar(
@@ -412,54 +559,17 @@ class _ProjectsPageState extends State<ProjectsPage> {
         elevation: 0,
       ),
       floatingActionButton: FloatingActionButton(
-        onPressed: _addCategory,
+        onPressed: _isRefreshing ? null : _addCategory,
         backgroundColor: const Color(0xFF7C3AED),
         foregroundColor: Colors.white,
         shape: const CircleBorder(),
         child: const Icon(Icons.add),
       ),
-      body: FutureBuilder<List<dynamic>>(
-        future: Future.wait([
-          fetchCategories(),
-          fetchTasks(),
-        ]),
-        builder: (context, snapshot) {
-          final categories =
-              snapshot.data?[0] as List<Map<String, dynamic>>? ?? [];
-          final tasks =
-              snapshot.data?[1] as List<Map<String, dynamic>>? ?? [];
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          if (categories.isEmpty) {
-            return const Center(child: Text('No projects yet'));
-          }
-
-          return GridView.builder(
-            padding: const EdgeInsets.fromLTRB(18, 18, 18, 100),
-            itemCount: categories.length,
-            gridDelegate: const SliverGridDelegateWithFixedCrossAxisCount(
-              crossAxisCount: 2,
-              crossAxisSpacing: 14,
-              mainAxisSpacing: 14,
-              childAspectRatio: 1.05,
-            ),
-            itemBuilder: (context, index) {
-              final categoryData = categories[index];
-              final category = categoryData['name'].toString();
-
-              final count =
-                  tasks.where((t) => t['category'] == category).length;
-
-              return _projectCard(
-                categoryData: categoryData,
-                count: count,
-              );
-            },
-          );
-        },
+      body: Stack(
+        children: [
+          _grid(),
+          if (_isRefreshing) _updatingBadge(),
+        ],
       ),
     );
   }

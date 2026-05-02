@@ -17,6 +17,19 @@ class _HomePageState extends State<HomePage> {
   String _selectedFilter = 'All';
   String _searchQuery = '';
 
+  List<Map<String, dynamic>> _tasks = [];
+  bool _isFirstLoading = true;
+  bool _isRefreshing = false;
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTasks(firstLoad: true);
+    });
+  }
+
   Future<void> _logout(BuildContext context) async {
     await supabase.auth.signOut();
 
@@ -43,6 +56,39 @@ class _HomePageState extends State<HomePage> {
     return List<Map<String, dynamic>>.from(response);
   }
 
+  Future<void> _loadTasks({bool firstLoad = false}) async {
+    if (!mounted) return;
+
+    if (!firstLoad) {
+      setState(() {
+        _isRefreshing = true;
+      });
+    }
+
+    try {
+      final data = await fetchTasks();
+
+      if (!mounted) return;
+
+      setState(() {
+        _tasks = data;
+        _isFirstLoading = false;
+        _isRefreshing = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isFirstLoading = false;
+        _isRefreshing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load tasks: $e')),
+      );
+    }
+  }
+
   Future<void> updateTaskCompletion(String id, bool value) async {
     await supabase.from('tasks').update({'is_completed': value}).eq('id', id);
   }
@@ -58,7 +104,7 @@ class _HomePageState extends State<HomePage> {
   List<Map<String, dynamic>> _applyFilters(List<Map<String, dynamic>> allTasks) {
     var tasks = _selectedFilter == 'Priority'
         ? allTasks.where((task) => _isPriority(task)).toList()
-        : allTasks;
+        : List<Map<String, dynamic>>.from(allTasks);
 
     if (_searchQuery.isNotEmpty) {
       tasks = tasks.where((task) {
@@ -251,6 +297,45 @@ class _HomePageState extends State<HomePage> {
     );
   }
 
+  Widget _updatingBadge() {
+    return Positioned(
+      top: 12,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Updating...',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
   Widget _premiumTask(Map<String, dynamic> task) {
     return PremiumTaskCard(
       task: task,
@@ -264,19 +349,40 @@ class _HomePageState extends State<HomePage> {
         );
 
         if (updated == true && mounted) {
-          setState(() {});
+          await _loadTasks();
         }
       },
       onDelete: () async {
         await deleteTask(task['id']);
         if (!mounted) return;
-        setState(() {});
+        await _loadTasks();
       },
       onCompletedChanged: (value) async {
         await updateTaskCompletion(task['id'], value);
         if (!mounted) return;
-        setState(() {});
+        await _loadTasks();
       },
+    );
+  }
+
+  Widget _taskList() {
+    final filteredTasks = _applyFilters(_tasks);
+
+    if (filteredTasks.isEmpty) {
+      return _buildEmptyState();
+    }
+
+    return Stack(
+      children: [
+        ListView.builder(
+          padding: const EdgeInsets.only(bottom: 110),
+          itemCount: filteredTasks.length,
+          itemBuilder: (context, index) {
+            return _premiumTask(filteredTasks[index]);
+          },
+        ),
+        if (_isRefreshing) _updatingBadge(),
+      ],
     );
   }
 
@@ -288,6 +394,15 @@ class _HomePageState extends State<HomePage> {
 
   @override
   Widget build(BuildContext context) {
+    if (_isFirstLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8FAFC),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
       body: SafeArea(
@@ -323,41 +438,7 @@ class _HomePageState extends State<HomePage> {
                     _buildFilterChips(),
                     const SizedBox(height: 18),
                     Expanded(
-                      child: FutureBuilder<List<Map<String, dynamic>>>(
-                        future: fetchTasks(),
-                        builder: (context, snapshot) {
-                          if (snapshot.connectionState ==
-                              ConnectionState.waiting) {
-                            return const Center(
-                              child: CircularProgressIndicator(),
-                            );
-                          }
-
-                          if (snapshot.hasError) {
-                            return Center(
-                              child: Text(
-                                'Something went wrong.\n${snapshot.error}',
-                                textAlign: TextAlign.center,
-                              ),
-                            );
-                          }
-
-                          final allTasks = snapshot.data ?? [];
-                          final tasks = _applyFilters(allTasks);
-
-                          if (tasks.isEmpty) {
-                            return _buildEmptyState();
-                          }
-
-                          return ListView.builder(
-                            padding: const EdgeInsets.only(bottom: 110),
-                            itemCount: tasks.length,
-                            itemBuilder: (context, index) {
-                              return _premiumTask(tasks[index]);
-                            },
-                          );
-                        },
-                      ),
+                      child: _taskList(),
                     ),
                   ],
                 ),
@@ -368,15 +449,18 @@ class _HomePageState extends State<HomePage> {
       ),
       floatingActionButton: FloatingActionButton(
         elevation: 6,
-        onPressed: () async {
-          await Navigator.push(
-            context,
-            MaterialPageRoute(builder: (_) => const AddTaskPage()),
-          );
+        onPressed: _isRefreshing
+            ? null
+            : () async {
+                final added = await Navigator.push(
+                  context,
+                  MaterialPageRoute(builder: (_) => const AddTaskPage()),
+                );
 
-          if (!mounted) return;
-          setState(() {});
-        },
+                if (added == true && mounted) {
+                  await _loadTasks();
+                }
+              },
         backgroundColor: const Color(0xFF7C3AED),
         foregroundColor: Colors.white,
         shape: const CircleBorder(),

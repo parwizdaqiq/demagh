@@ -13,6 +13,10 @@ class TasksPage extends StatefulWidget {
 class _TasksPageState extends State<TasksPage> {
   DateTime _selectedDay = DateTime.now();
 
+  List<Map<String, dynamic>> _tasks = [];
+  bool _isFirstLoading = true;
+  bool _isRefreshing = false;
+
   final List<String> _months = const [
     'Jan', 'Feb', 'Mar', 'Apr', 'May', 'Jun',
     'Jul', 'Aug', 'Sep', 'Oct', 'Nov', 'Dec',
@@ -21,6 +25,15 @@ class _TasksPageState extends State<TasksPage> {
   final List<String> _weekDays = const [
     'Mon', 'Tue', 'Wed', 'Thu', 'Fri', 'Sat', 'Sun',
   ];
+
+  @override
+  void initState() {
+    super.initState();
+
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      _loadTasks(firstLoad: true);
+    });
+  }
 
   Future<List<Map<String, dynamic>>> fetchTasks() async {
     final user = supabase.auth.currentUser;
@@ -33,6 +46,39 @@ class _TasksPageState extends State<TasksPage> {
         .order('created_at', ascending: false);
 
     return List<Map<String, dynamic>>.from(response);
+  }
+
+  Future<void> _loadTasks({bool firstLoad = false}) async {
+    if (!mounted) return;
+
+    if (!firstLoad) {
+      setState(() {
+        _isRefreshing = true;
+      });
+    }
+
+    try {
+      final data = await fetchTasks();
+
+      if (!mounted) return;
+
+      setState(() {
+        _tasks = data;
+        _isFirstLoading = false;
+        _isRefreshing = false;
+      });
+    } catch (e) {
+      if (!mounted) return;
+
+      setState(() {
+        _isFirstLoading = false;
+        _isRefreshing = false;
+      });
+
+      ScaffoldMessenger.of(context).showSnackBar(
+        SnackBar(content: Text('Failed to load tasks: $e')),
+      );
+    }
   }
 
   Future<void> updateTaskCompletion(String id, bool value) async {
@@ -146,6 +192,45 @@ class _TasksPageState extends State<TasksPage> {
 
     final parts = time.toString().split(':');
     return int.tryParse(parts[0]) ?? 99;
+  }
+
+  Widget _updatingBadge() {
+    return Positioned(
+      top: 12,
+      left: 0,
+      right: 0,
+      child: Center(
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white,
+            borderRadius: BorderRadius.circular(999),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withValues(alpha: 0.08),
+                blurRadius: 14,
+                offset: const Offset(0, 6),
+              ),
+            ],
+          ),
+          child: const Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              SizedBox(
+                width: 14,
+                height: 14,
+                child: CircularProgressIndicator(strokeWidth: 2),
+              ),
+              SizedBox(width: 8),
+              Text(
+                'Updating...',
+                style: TextStyle(fontWeight: FontWeight.w800),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   Widget _dateCard(DateTime day) {
@@ -286,86 +371,100 @@ class _TasksPageState extends State<TasksPage> {
         );
 
         if (updated == true && mounted) {
-          setState(() {});
+          await _loadTasks();
         }
       },
       onDelete: () async {
         await deleteTask(task['id']);
         if (!mounted) return;
-        setState(() {});
+        await _loadTasks();
       },
       onCompletedChanged: (value) async {
         await updateTaskCompletion(task['id'], value);
         if (!mounted) return;
-        setState(() {});
+        await _loadTasks();
       },
+    );
+  }
+
+  Widget _emptyState() {
+    return Center(
+      child: Text(
+        'No tasks on this date',
+        style: TextStyle(
+          color: Colors.grey.shade600,
+          fontWeight: FontWeight.w700,
+        ),
+      ),
+    );
+  }
+
+  Widget _tasksList(List<Map<String, dynamic>> selectedTasks) {
+    if (selectedTasks.isEmpty) {
+      return _emptyState();
+    }
+
+    return Stack(
+      children: [
+        ListView.builder(
+          padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
+          itemCount: selectedTasks.length,
+          itemBuilder: (context, index) {
+            return _premiumTask(selectedTasks[index]);
+          },
+        ),
+        if (_isRefreshing) _updatingBadge(),
+      ],
     );
   }
 
   @override
   Widget build(BuildContext context) {
+    final selectedTasks = _tasksForDay(_tasks, _selectedDay)
+      ..sort((a, b) => _hourFromTask(a).compareTo(_hourFromTask(b)));
+
+    if (_isFirstLoading) {
+      return const Scaffold(
+        backgroundColor: Color(0xFFF8FAFC),
+        body: Center(
+          child: CircularProgressIndicator(),
+        ),
+      );
+    }
+
     return Scaffold(
       backgroundColor: const Color(0xFFF8FAFC),
-      body: FutureBuilder<List<Map<String, dynamic>>>(
-        future: fetchTasks(),
-        builder: (context, snapshot) {
-          final allTasks = snapshot.data ?? [];
-          final selectedTasks = _tasksForDay(allTasks, _selectedDay)
-            ..sort((a, b) => _hourFromTask(a).compareTo(_hourFromTask(b)));
-
-          if (snapshot.connectionState == ConnectionState.waiting) {
-            return const Center(child: CircularProgressIndicator());
-          }
-
-          return Column(
-            children: [
-              _header(),
-              const SizedBox(height: 18),
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 20),
-                child: Row(
-                  children: [
-                    Text(
-                      _friendlyDateLabel(),
-                      style: const TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                      ),
-                    ),
-                    const Spacer(),
-                    Text(
-                      '${selectedTasks.length} tasks',
-                      style: const TextStyle(
-                        color: Color(0xFF7C3AED),
-                        fontWeight: FontWeight.w800,
-                      ),
-                    ),
-                  ],
+      body: Column(
+        children: [
+          _header(),
+          const SizedBox(height: 18),
+          Padding(
+            padding: const EdgeInsets.symmetric(horizontal: 20),
+            child: Row(
+              children: [
+                Text(
+                  _friendlyDateLabel(),
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.w900,
+                  ),
                 ),
-              ),
-              const SizedBox(height: 16),
-              Expanded(
-                child: selectedTasks.isEmpty
-                    ? Center(
-                        child: Text(
-                          'No tasks on this date',
-                          style: TextStyle(
-                            color: Colors.grey.shade600,
-                            fontWeight: FontWeight.w700,
-                          ),
-                        ),
-                      )
-                    : ListView.builder(
-                        padding: const EdgeInsets.fromLTRB(20, 0, 20, 100),
-                        itemCount: selectedTasks.length,
-                        itemBuilder: (context, index) {
-                          return _premiumTask(selectedTasks[index]);
-                        },
-                      ),
-              ),
-            ],
-          );
-        },
+                const Spacer(),
+                Text(
+                  '${selectedTasks.length} tasks',
+                  style: const TextStyle(
+                    color: Color(0xFF7C3AED),
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 16),
+          Expanded(
+            child: _tasksList(selectedTasks),
+          ),
+        ],
       ),
     );
   }
